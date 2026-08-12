@@ -1,6 +1,7 @@
 # Changelog
 
-All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
@@ -24,6 +25,12 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   receipt image, and an official sample statement delegation contract.
 - Default-on XLSX/ODS gridlines with file visibility and colour, opt-in row and
   column headers, and frozen-pane pixel extents for independently painted views.
+- Licensed real-document evidence: a 34-page NIST DOCX chapter, an 11-slide NASA
+  PPTX, and a two-page UK IPO ODT agreement, with source URLs and checksums.
+- Non-waivable exact-text, p95-geometry, and pagination floors for every flow and
+  slide corpus document.
+- Explicit `UnsupportedMedia` evidence for SVG, EMF, and WMF slide assets rather
+  than rejecting the whole deck or silently omitting them.
 
 ### Changed
 
@@ -43,6 +50,9 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   15-significant-digit display precision without binary floating-point drift.
 - XML character references are retained across DOCX, ODT, ODS, PPTX, and ODP
   text paths instead of being silently dropped by event parsing.
+- Page-document fidelity now measures every page shared with the reference and
+  records extra or missing pages independently instead of assuming page counts
+  match.
 
 ### Removed
 
@@ -50,3 +60,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   between natural-sheet and print-page canvases.
 - Removed absolute SSIM release floors and the 0.473395 sheet score as fidelity
   claims; sparse white canvases cannot support either conclusion.
+- Removed uniform format-support wording: each README claim now identifies its
+  real, synthetic, parser-only, or host-delegated evidence.
+
+[Unreleased]: https://github.com/AllanTumu/readany-render/commits/main

@@ -1,7 +1,7 @@
 {
   "name": "readany-render",
   "version": "0.1.0",
-  "description": "Page-faithful office document display lists for browsers",
+  "description": "Local, inspectable office document display lists for browsers",
   "license": "MIT",
   "repository": "https://github.com/AllanTumu/readany-render",
   "keywords": ["document", "renderer", "xlsx", "docx", "wasm"],

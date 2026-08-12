@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish = false
-description = "WebAssembly bindings for page-faithful office document display lists"
+description = "WebAssembly bindings for local, inspectable office document display lists"
 repository.workspace = true
 
 [features]

@@ -1,6 +1,6 @@
 [package]
 name = "readany-render"
-description = "Page-faithful display lists and rasterisation for office documents"
+description = "Local, inspectable display lists and rasterisation for office documents"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

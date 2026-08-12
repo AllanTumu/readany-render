@@ -1,8 +1,9 @@
 # Implementation report
 
-Measured on 12 August 2026 on Apple Silicon macOS with stable Rust. This report
-supersedes the earlier acceptance report: its spreadsheet fidelity figures were
-invalid because incomparable canvases were padded with white pixels.
+Measured on 12 August 2026 on an Apple M4 Pro MacBook Pro (14 cores, 24 GB,
+macOS 26.5.1) with Rust 1.97.1. This report supersedes the earlier acceptance
+report: its spreadsheet fidelity figures were invalid because incomparable
+canvases were padded with white pixels.
 
 ## Rendering status
 
@@ -53,16 +54,16 @@ The full Endo and generated-wide sheet rasters still correctly fail above the
 
 | Build | Measured gzip size | Budget | Result |
 | --- | ---: | ---: | --- |
-| Core WASM, no bundled fonts | 1,578,147 bytes | 4,194,304 bytes | pass |
-| WASM with bundled fonts | 5,605,777 bytes | 9,437,184 bytes | pass |
+| Core WASM, no bundled fonts | 1,583,532 bytes | 4,194,304 bytes | pass |
+| WASM with bundled fonts | 5,610,140 bytes | 9,437,184 bytes | pass |
 
 ## Performance
 
 | Gate | Measured | Budget | Result |
 | --- | ---: | ---: | --- |
-| Generated 400 x 350 XLSX to display list | 441 ms | 500 ms | pass |
-| Real Endo workbook to display list | 245 ms | 500 ms | pass |
-| Real Endo 1,200 x 800 viewport raster | 40 ms | 100 ms | pass |
+| Generated 400 x 350 XLSX to display list | 439 ms | 500 ms | pass |
+| Real Endo workbook to display list | 241 ms | 500 ms | pass |
+| Real Endo 1,200 x 800 viewport raster | 41 ms | 100 ms | pass |
 | 100-page DOCX to display list | 1 ms | 3,000 ms | pass |
 | One small page raster | <1 ms | 100 ms | pass |
 

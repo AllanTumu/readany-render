@@ -48,18 +48,36 @@ small documents and inspection. In Rust, use `rasterise_rect` and
 `items_in_rect` for the same viewport workflow; `rasterise` deliberately
 refuses full canvases above 100 million pixels.
 
-## Format support
+## Measured format status
 
-| Family | Formats | Boundary |
+“Implemented” means the parser reaches a display list and names omissions. It
+does not mean visual fidelity has been demonstrated. Every claim below names
+the corpus behind it; results from one format are never generalized to another.
+
+| Format | Status | Evidence |
 | --- | --- | --- |
-| Spreadsheets | XLSX, XLSM, ODS, CSV, TSV | Cached formula values, widths/heights, merges, frozen panes, fonts, fills, borders, alignment, and number formats are displayed. Charts, pivots, conditional formatting, hidden sheets, macros, and external links are reported. |
-| Flow documents | DOCX, ODT, RTF | Style cascades, shaped runs, bidi and line breaking, indents, alignment, spacing, pagination controls, lists, tables, repeating parts, and embedded images produce positioned content. Embedded OLE and external links are reported. |
-| Slides | PPTX, ODP | Explicit geometry, styled text and shapes, embedded images, and layout/master inheritance produce one display-list page per slide. |
-| Images | PNG, JPEG, GIF, BMP, WebP | One image item on one page, subject to the pixel ceiling. |
-| Delegated | PDF, HEIC | No partial preview: `DelegateToHost` tells the caller to use its platform viewer. |
+| XLSX | Proven on current corpus | Endo and OakPrism real workbooks: 100% exhaustive exact cell text; sampled geometry p95 0.27 px and 3.27 px |
+| XLSM | Implemented; not real-corpus proven | Generated macro fixture and the XLSX path; macro omission is explicit |
+| ODS | Implemented; not real-corpus proven | Generated ODS fixtures and golden/raster tests only |
+| CSV | Implemented; parser-tested only | Generated quoted-field/newline fixtures only |
+| TSV | Implemented; parser-tested only | Generated delimiter fixtures only |
+| DOCX | Material fidelity defects | Real 34-page NIST chapter renders as 37 pages: 36.5% exact text, 610.30 px p95 |
+| ODT | Material fidelity defects | Real two-page UK IPO agreement renders as three pages: 14.8% exact text, 864.96 px p95 |
+| RTF | Implemented; synthetic evidence only | `basic.rtf`: 100% exact text, 8.07 px p95; no real RTF corpus document |
+| PPTX | Material fidelity defects | Real 11-slide NASA deck: correct slide count, 77.9% exact text, 373.57 px p95, two named unsupported EMFs |
+| ODP | Implemented; synthetic evidence only | `basic.odp`: 100% exact text, 4.97 px p95; no real ODP corpus document |
+| PNG | Implemented; parser/raster tested | Generated image fixtures |
+| JPEG | Implemented; photographed evidence | Real photographed receipt plus EXIF-orientation fixtures |
+| GIF | Implemented; parser/raster tested | Generated image fixtures |
+| BMP | Implemented; parser/raster tested | Generated image fixtures |
+| WebP | Implemented; parser/raster tested | Generated image fixtures |
+| PDF | Delegated to host by design | Official CFPB statement pins `DelegateToHost { format: Pdf }` |
+| HEIC | Delegated to host by design | Contract tests pin `DelegateToHost { format: Heic }` |
 
-PDF delegation is deliberate. Browsers, iOS, and Android already ship mature
-PDF viewers, and this library does not compete with PDFium.
+> **PDF is deliberately outside this renderer.** A PDF never becomes a partial
+> local preview: `DelegateToHost` requires the caller to use its platform PDF
+> viewer. Browsers, iOS, and Android already ship mature viewers, and this
+> library does not compete with PDFium.
 
 ## Fonts and size
 
@@ -68,8 +86,10 @@ and Liberation Sans/Serif/Mono faces plus DejaVu Sans, with their
 OFL/Bitstream licence texts. They substitute Calibri, Cambria, Arial/Helvetica,
 Times New Roman, and Courier New using compatible metrics.
 Browser builds support either `--features fonts` or the core build plus
-`addFont(bytes)`. The measured release WASM sizes are 1,578,147 bytes gzipped
-without fonts (4 MiB budget) and 5,605,777 bytes with fonts (9 MiB budget).
+`addFont(bytes)`. Measured on 12 August 2026 on an Apple M4 Pro MacBook Pro (14
+cores, 24 GB, macOS 26.5.1, Rust 1.97.1), the release WASM is **1,583,532 bytes
+gzipped** without fonts (4 MiB budget) and **5,610,140 bytes gzipped** with
+fonts (9 MiB budget).
 The root npm export works with ESM bundlers; `readany-render/no-bundler` exposes
 the same web initializer explicitly for direct browser imports. Both modes let
 the caller pass a `wasmUrl` to `init`, and the npm tarball includes every
@@ -78,6 +98,15 @@ bundled font's licence text.
 The library never opens a socket, never resolves an external relationship, and
 never writes document data to disk. The CLI and fidelity harness are separate
 native tools and are the only filesystem users.
+
+## Measured performance
+
+On the same machine and date, `./scripts/check-performance.sh` measured the
+generated 400 x 350 sheet at **439 ms**, the real Endo workbook parse at **241
+ms**, its 1,200 x 800 viewport raster at **41 ms**, the generated 100-page DOCX
+at **1 ms**, and a small-page raster below the timer's 1 ms resolution. Budgets
+are 500 ms for sheet parsing, 100 ms for the real viewport, 3,000 ms for the
+100-page DOCX, and 100 ms for the small page.
 
 ## Development
 
