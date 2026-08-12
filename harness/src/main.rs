@@ -13,12 +13,24 @@ use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const CORPUS: &[&str] = &[
-    "basic.docx",
-    "basic.odt",
-    "basic.rtf",
-    "basic.pptx",
-    "basic.odp",
+const PAGE_CORPUS: &[(&str, &str)] = &[
+    ("basic.docx", "fixtures/basic.docx"),
+    ("basic.odt", "fixtures/basic.odt"),
+    ("basic.rtf", "fixtures/basic.rtf"),
+    ("basic.pptx", "fixtures/basic.pptx"),
+    ("basic.odp", "fixtures/basic.odp"),
+    (
+        "nist-hb133-2026-chapter-2.docx",
+        "corpus/real/nist-hb133-2026-chapter-2.docx",
+    ),
+    (
+        "nasa-agency-report-2022.pptx",
+        "corpus/real/nasa-agency-report-2022.pptx",
+    ),
+    (
+        "uk-ipo-one-way-nda.odt",
+        "corpus/real/uk-ipo-one-way-nda.odt",
+    ),
 ];
 
 const SHEET_CORPUS: &[(&str, &str)] = &[
@@ -32,6 +44,67 @@ const SHEET_CORPUS: &[(&str, &str)] = &[
 const IMAGE_CORPUS: &[(&str, &str)] = &[("receipt.jpg", "corpus/real/receipt.jpg")];
 const SHEET_MIN_EXACT_TEXT: f64 = 0.99;
 const SHEET_MAX_P95_ERROR_PX: f64 = 4.0;
+
+struct PagePublishBar {
+    name: &'static str,
+    min_exact_text: f64,
+    max_p95_error_px: f64,
+    min_pagination_ratio: f64,
+}
+
+// These are hard regression floors rounded from the 2026-08-12 measurements.
+// They describe the evidence we currently have; they are not claims that the
+// low-scoring real documents are publication-ready.
+const PAGE_PUBLISH_BARS: &[PagePublishBar] = &[
+    PagePublishBar {
+        name: "basic.docx",
+        min_exact_text: 0.99,
+        max_p95_error_px: 6.5,
+        min_pagination_ratio: 1.0,
+    },
+    PagePublishBar {
+        name: "basic.odt",
+        min_exact_text: 0.99,
+        max_p95_error_px: 12.5,
+        min_pagination_ratio: 1.0,
+    },
+    PagePublishBar {
+        name: "basic.rtf",
+        min_exact_text: 0.99,
+        max_p95_error_px: 8.25,
+        min_pagination_ratio: 1.0,
+    },
+    PagePublishBar {
+        name: "basic.pptx",
+        min_exact_text: 0.99,
+        max_p95_error_px: 5.6,
+        min_pagination_ratio: 1.0,
+    },
+    PagePublishBar {
+        name: "basic.odp",
+        min_exact_text: 0.99,
+        max_p95_error_px: 5.1,
+        min_pagination_ratio: 1.0,
+    },
+    PagePublishBar {
+        name: "nist-hb133-2026-chapter-2.docx",
+        min_exact_text: 0.36,
+        max_p95_error_px: 611.0,
+        min_pagination_ratio: 0.91,
+    },
+    PagePublishBar {
+        name: "nasa-agency-report-2022.pptx",
+        min_exact_text: 0.77,
+        max_p95_error_px: 374.0,
+        min_pagination_ratio: 1.0,
+    },
+    PagePublishBar {
+        name: "uk-ipo-one-way-nda.odt",
+        min_exact_text: 0.14,
+        max_p95_error_px: 866.0,
+        min_pagination_ratio: 0.66,
+    },
+];
 
 const IMAGE_VIEWPORTS: &[Rect] = &[
     Rect {
@@ -52,6 +125,15 @@ const IMAGE_VIEWPORTS: &[Rect] = &[
 struct Score {
     pixel: PixelScore,
     text: Option<TextScore>,
+    #[serde(default)]
+    pagination: Option<PaginationScore>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct PaginationScore {
+    ours: u64,
+    reference: u64,
+    ratio: f64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -206,6 +288,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 measurements.push(Score {
                     pixel: compare_pixels(&ours, &reference),
                     text: Some(compare_text(name, &ours_text, &reference_text)),
+                    pagination: None,
                 });
                 if dpi == 96 && viewport_index == 0 {
                     contact_rows.push(contact_row(name, &ours, &reference));
@@ -261,6 +344,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 measurements.push(Score {
                     pixel: compare_pixels(&ours, &reference),
                     text: None,
+                    pagination: None,
                 });
                 if dpi == 96 && viewport_index == 0 {
                     contact_rows.push(contact_row(name, &ours, &reference));
@@ -269,8 +353,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         insert_score(&mut scores, name, &measurements)?;
     }
-    for name in CORPUS {
-        let source = root.join("fixtures").join(name);
+    for (name, relative_path) in PAGE_CORPUS {
+        let source = root.join(relative_path);
         let bytes = std::fs::read(&source)?;
         let rendered = render(
             &bytes,
@@ -290,6 +374,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .ok_or("invalid fixture name")?
         ));
         let reference_text = reference_pdf_text(&pdf, &rendered.pages, &document_work)?;
+        let comparable_pages = rendered.pages.len().min(reference_text.len());
+        println!(
+            "{name}: rendered_pages={} reference_pages={} comparable_pages={}",
+            rendered.pages.len(),
+            reference_text.len(),
+            comparable_pages
+        );
         let mut measurements = Vec::new();
         for dpi in [96_u32, 192] {
             let prefix = document_work.join(format!("reference-{dpi}"));
@@ -301,12 +392,20 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             if !status.success() {
                 return Err(format!("pdftoppm failed for {name}").into());
             }
-            for (page_index, page) in rendered.pages.iter().enumerate() {
+            for (page_index, page) in rendered.pages.iter().take(comparable_pages).enumerate() {
                 let ours = rasterise(page, dpi as f32 / 96.0)?;
-                let ours_path = report.join(format!("{}-{}-ours.png", name.replace('.', "-"), dpi));
+                let ours_path = report.join(format!(
+                    "{}-{}-page-{}-ours.png",
+                    name.replace('.', "-"),
+                    dpi,
+                    page_index + 1
+                ));
                 std::fs::write(&ours_path, ours.encode_png()?)?;
-                let reference_path =
-                    document_work.join(format!("reference-{dpi}-{}.png", page_index + 1));
+                let page_number_width = reference_text.len().to_string().len();
+                let reference_path = document_work.join(format!(
+                    "reference-{dpi}-{:0page_number_width$}.png",
+                    page_index + 1
+                ));
                 let reference = image::open(&reference_path)?.to_rgba8();
                 let ours = image::load_from_memory(&ours.encode_png()?)?.to_rgba8();
                 ensure_comparable(name, &ours, &reference)?;
@@ -318,6 +417,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 measurements.push(Score {
                     pixel: compare_pixels(&left, &right),
                     text: Some(compare_text(name, &ours_text, page_reference_text)),
+                    pagination: None,
                 });
                 if dpi == 96 && page_index == 0 {
                     contact_rows.push(contact_row(name, &left, &right));
@@ -325,11 +425,19 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         insert_score(&mut scores, name, &measurements)?;
+        apply_pagination_score(
+            &mut scores,
+            name,
+            rendered.pages.len(),
+            reference_text.len(),
+        )?;
     }
     write_contact_sheet(&report.join("contact-sheet.png"), &contact_rows)?;
-    let paged_text_mean = mean_for(&scores, CORPUS.iter().copied(), |score| {
-        score.text.as_ref().map(|text| text.combined)
-    })?;
+    let paged_text_mean = mean_for(
+        &scores,
+        PAGE_CORPUS.iter().map(|(name, _)| *name),
+        |score| score.text.as_ref().map(|text| text.combined),
+    )?;
     let sheet_text_mean = mean_for(
         &scores,
         SHEET_CORPUS.iter().map(|(name, _)| *name),
@@ -362,6 +470,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 score.pixel.ink_density_ours * 100.0,
                 score.pixel.ink_density_reference * 100.0,
             );
+            if let Some(pagination) = &score.pagination {
+                println!(
+                    "{name}: pagination={}/{} ratio={:.6}",
+                    pagination.ours, pagination.reference, pagination.ratio
+                );
+            }
         } else {
             println!(
                 "{name}: no-text diagnostic aligned_ssim={:.6} ink={:.4}%/{:.4}%",
@@ -372,6 +486,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     enforce_sheet_publish_bar(&scores)?;
+    enforce_page_publish_bar(&scores)?;
     let scores_path = root.join("harness/baseline.json");
     if update {
         std::fs::write(
@@ -388,6 +503,41 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         format!("{}\n", serde_json::to_string_pretty(&scores)?),
     )?;
     let _ = std::fs::remove_dir_all(work);
+    Ok(())
+}
+
+fn enforce_page_publish_bar(
+    scores: &BTreeMap<String, Score>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for bar in PAGE_PUBLISH_BARS {
+        let score = scores
+            .get(bar.name)
+            .ok_or_else(|| format!("{} has no page-document evidence", bar.name))?;
+        let text = score
+            .text
+            .as_ref()
+            .ok_or_else(|| format!("{} has no page-document text evidence", bar.name))?;
+        let pagination = score
+            .pagination
+            .as_ref()
+            .ok_or_else(|| format!("{} has no pagination evidence", bar.name))?;
+        if text.exact_text < bar.min_exact_text
+            || text.p95_error > bar.max_p95_error_px
+            || pagination.ratio < bar.min_pagination_ratio
+        {
+            return Err(format!(
+                "{} misses its measured evidence floor: exact={:.6} (minimum {:.2}), p95={:.2}px (maximum {:.2}px), pagination={:.6} (minimum {:.2})",
+                bar.name,
+                text.exact_text,
+                bar.min_exact_text,
+                text.p95_error,
+                bar.max_p95_error_px,
+                pagination.ratio,
+                bar.min_pagination_ratio,
+            )
+            .into());
+        }
+    }
     Ok(())
 }
 
@@ -548,8 +698,26 @@ fn insert_score(
                     / count,
             },
             text,
+            pagination: None,
         },
     );
+    Ok(())
+}
+
+fn apply_pagination_score(
+    scores: &mut BTreeMap<String, Score>,
+    name: &str,
+    ours: usize,
+    reference: usize,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let score = scores
+        .get_mut(name)
+        .ok_or_else(|| format!("{name} has no page-document measurement"))?;
+    score.pagination = Some(PaginationScore {
+        ours: ours as u64,
+        reference: reference as u64,
+        ratio: ours.min(reference) as f64 / ours.max(reference).max(1) as f64,
+    });
     Ok(())
 }
 
@@ -714,7 +882,8 @@ fn parse_pdf_text_boxes(
             Event::End(event) if event.name().as_ref() == b"page" => {
                 let page = pages
                     .get(result.len())
-                    .ok_or("pdftotext returned more pages than the display list")?;
+                    .or_else(|| pages.last())
+                    .ok_or("cannot scale PDF text without a display-list page")?;
                 let (pdf_width, pdf_height) = page_size.ok_or("PDF bbox page has no size")?;
                 let scale_x = f64::from(page.size.width) / pdf_width.max(1.0);
                 let scale_y = f64::from(page.size.height) / pdf_height.max(1.0);
@@ -731,14 +900,6 @@ fn parse_pdf_text_boxes(
             _ => {}
         }
         buffer.clear();
-    }
-    if result.len() != pages.len() {
-        return Err(format!(
-            "pdftotext returned {} pages for a {}-page display list",
-            result.len(),
-            pages.len()
-        )
-        .into());
     }
     Ok(result)
 }
@@ -1623,6 +1784,7 @@ mod tests {
                 mean_error: 0.0,
                 p95_error,
             }),
+            pagination: None,
         };
         let passing = SHEET_CORPUS
             .iter()
@@ -1637,5 +1799,62 @@ mod tests {
         let mut drift = passing;
         drift.insert(SHEET_CORPUS[1].0.into(), score(1.0, 4.01));
         assert!(enforce_sheet_publish_bar(&drift).is_err());
+    }
+
+    #[test]
+    fn page_publish_bars_cannot_be_waived_by_a_baseline_update() {
+        let score = |bar: &PagePublishBar| Score {
+            pixel: PixelScore {
+                aligned_ssim: 0.0,
+                offset_x: 0.0,
+                offset_y: 0.0,
+                ink_density_ours: 0.0,
+                ink_density_reference: 0.0,
+            },
+            text: Some(TextScore {
+                ours: 100,
+                reference: 100,
+                matched: 100,
+                mismatched_sources: 0,
+                exact_text: bar.min_exact_text,
+                geometry: 1.0,
+                combined: bar.min_exact_text,
+                offset_x: 0.0,
+                offset_y: 0.0,
+                mean_error: 0.0,
+                p95_error: bar.max_p95_error_px,
+            }),
+            pagination: Some(PaginationScore {
+                ours: 100,
+                reference: 100,
+                ratio: bar.min_pagination_ratio,
+            }),
+        };
+        let passing: BTreeMap<_, _> = PAGE_PUBLISH_BARS
+            .iter()
+            .map(|bar| (bar.name.to_owned(), score(bar)))
+            .collect();
+        assert!(enforce_page_publish_bar(&passing).is_ok());
+
+        let mut text_loss = passing.clone();
+        let bar = &PAGE_PUBLISH_BARS[0];
+        let mut failed = score(bar);
+        failed.text.as_mut().unwrap().exact_text = bar.min_exact_text - 0.001;
+        text_loss.insert(bar.name.into(), failed);
+        assert!(enforce_page_publish_bar(&text_loss).is_err());
+
+        let mut geometry_drift = passing.clone();
+        let bar = &PAGE_PUBLISH_BARS[1];
+        let mut failed = score(bar);
+        failed.text.as_mut().unwrap().p95_error = bar.max_p95_error_px + 0.01;
+        geometry_drift.insert(bar.name.into(), failed);
+        assert!(enforce_page_publish_bar(&geometry_drift).is_err());
+
+        let mut pagination_loss = passing;
+        let bar = &PAGE_PUBLISH_BARS[2];
+        let mut failed = score(bar);
+        failed.pagination.as_mut().unwrap().ratio = bar.min_pagination_ratio - 0.01;
+        pagination_loss.insert(bar.name.into(), failed);
+        assert!(enforce_page_publish_bar(&pagination_loss).is_err());
     }
 }

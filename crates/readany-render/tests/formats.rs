@@ -302,6 +302,23 @@ fn every_unrendered_variant_has_a_generated_fixture() {
             .any(|entry| matches!(entry, Unrendered::Macro))
     );
 
+    let unsupported_media = render(
+        include_bytes!("../../../fixtures/unsupported-media.pptx"),
+        &Options {
+            filename: Some("unsupported-media.pptx"),
+            ..Options::default()
+        },
+    )
+    .expect("unsupported slide media returns a named partial result");
+    assert_eq!(
+        unsupported_media.unrendered,
+        vec![Unrendered::UnsupportedMedia {
+            page: 0,
+            kind: "svg".into(),
+            count: 1,
+        }]
+    );
+
     let docx = render(
         include_bytes!("../../../fixtures/basic.docx"),
         &Options {

@@ -193,6 +193,7 @@ pub enum Unrendered {
     FormulaWithoutCachedValue { sheet: u32, row: u32, column: u32 },
     ExternalReference { target: String },
     UnsupportedGlyphs { script: String, count: u32 },
+    UnsupportedMedia { page: u32, kind: String, count: u32 },
     Ole { page: u32 },
     Macro,
     DelegateToHost { format: Format },

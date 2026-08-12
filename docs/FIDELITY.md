@@ -21,9 +21,12 @@ then contributes `exp(-error / 12)`, where error includes centre and box-size
 drift. `text fidelity` is `exact * geometry`. The report includes translation,
 mean error, p95 error, and source-aware largest drifts.
 
-The spreadsheet publish bar is executable, including on `--update`: every real
-sheet must have at least **99% exhaustive exact cell text** and sampled text-box
-**p95 error no greater than 4 px**. Updating a baseline cannot waive this bar.
+The publish bars are executable before the `--update` branch: updating a
+baseline cannot waive them. Every real sheet must have at least **99%
+exhaustive exact cell text** and sampled text-box **p95 error no greater than 4
+px**. Page-document floors are document-specific because the evidence is not
+uniform; they preserve the measured starting point but do not turn a poor
+starting point into a fidelity claim.
 
 Measured 12 August 2026:
 
@@ -35,12 +38,46 @@ Measured 12 August 2026:
 | `basic.pptx` | 1.000000 | 0.682948 | 0.682948 | 4.61 / 5.48 px |
 | `basic.rtf` | 1.000000 | 0.717480 | 0.717480 | 4.30 / 8.07 px |
 | `endo-prem-2023.xlsx` | 1.000000 | 0.978372 | 0.978372 | 0.26 / 0.27 px |
+| `nasa-agency-report-2022.pptx` | 0.778898 | 0.098206 | 0.076492 | 162.40 / 373.57 px |
+| `nist-hb133-2026-chapter-2.docx` | 0.365007 | 0.017430 | 0.006362 | 226.55 / 610.30 px |
 | `oakprism-stress-v3.xlsx` | 1.000000 | 0.967207 | 0.967207 | 0.45 / 3.27 px |
+| `uk-ipo-one-way-nda.odt` | 0.148148 | 0.008732 | 0.001294 | 347.64 / 864.96 px |
 
-The page-document text-fidelity mean is **0.715360** and the real-sheet mean is
+The page-document text-fidelity mean is **0.457618** and the real-sheet mean is
 **0.972789**. These remain regression evidence, not proof of universal format
 fidelity. CI rejects per-document or corpus regression beyond 0.001, requires
-baseline keys to match the corpus, and enforces the spreadsheet publish bar.
+baseline keys to match the corpus, and enforces both sets of hard floors.
+
+### Page-document evidence floors
+
+Each row shows the measurement followed by the rounded hard floor derived from
+it. The floor is checked for exact text, p95 geometry error, and page-count
+agreement. `pagination` is `min(ours, reference) / max(ours, reference)`.
+
+| Corpus document | Measured exact / minimum | Measured p95 / maximum | Pages ours / reference | Pagination / minimum |
+| --- | ---: | ---: | ---: | ---: |
+| `basic.docx` | 1.000000 / 0.99 | 6.36 / 6.50 px | 1 / 1 | 1.000000 / 1.00 |
+| `basic.odt` | 1.000000 / 0.99 | 12.35 / 12.50 px | 1 / 1 | 1.000000 / 1.00 |
+| `basic.rtf` | 1.000000 / 0.99 | 8.07 / 8.25 px | 1 / 1 | 1.000000 / 1.00 |
+| `basic.pptx` | 1.000000 / 0.99 | 5.48 / 5.60 px | 1 / 1 | 1.000000 / 1.00 |
+| `basic.odp` | 1.000000 / 0.99 | 4.97 / 5.10 px | 1 / 1 | 1.000000 / 1.00 |
+| `nist-hb133-2026-chapter-2.docx` | 0.365007 / 0.36 | 610.30 / 611.00 px | 37 / 34 | 0.918919 / 0.91 |
+| `nasa-agency-report-2022.pptx` | 0.778898 / 0.77 | 373.57 / 374.00 px | 11 / 11 | 1.000000 / 1.00 |
+| `uk-ipo-one-way-nda.odt` | 0.148148 / 0.14 | 864.96 / 866.00 px | 3 / 2 | 0.666667 / 0.66 |
+
+The real corpus answers the `basic.odt` question decisively. Its 0.608 geometry
+score was not evidence that ODT layout was nearly acceptable; the six-word,
+one-page fixture was too small to exercise pagination. The real UK agreement
+has only 14.8% exact text matching, 864.96 px p95 drift, and an extra page. DOCX
+has the same class of defect: the NIST chapter becomes 37 pages instead of 34,
+with major text loss/reordering and local drift. PPTX keeps the correct 11-slide
+count, but its 77.9% exact match, 373.57 px p95 drift, and explicit unsupported
+EMF evidence show that complex master/shape layout is not yet faithful.
+
+Only pages present on both sides contribute text and pixel measurements; extra
+or missing pages are measured separately by the pagination score. This avoids
+pretending an unmatched page has usable geometry while making the pagination
+defect impossible to hide.
 
 ## Pixel diagnostics
 
@@ -56,9 +93,12 @@ images. A dimension difference above 2% is a hard failure before comparison.
 | `basic.odt` | 0.993403 | 0.1425% / 0.1992% |
 | `basic.pptx` | 0.996485 | 0.1082% / 0.1360% |
 | `basic.rtf` | 0.995884 | 0.1133% / 0.1370% |
-| `endo-prem-2023.xlsx` | 0.977644 | 5.9187% / 6.7182% |
-| `oakprism-stress-v3.xlsx` | 0.930386 | 12.0678% / 13.9774% |
+| `endo-prem-2023.xlsx` | 0.733993 | 14.8375% / 6.7182% |
+| `nasa-agency-report-2022.pptx` | 0.752658 | 37.6333% / 78.3645% |
+| `nist-hb133-2026-chapter-2.docx` | 0.664051 | 6.5803% / 7.0554% |
+| `oakprism-stress-v3.xlsx` | 0.677122 | 21.6146% / 13.9774% |
 | `receipt.jpg` | 1.000000 | 95.6258% / 95.6258% |
+| `uk-ipo-one-way-nda.odt` | 0.710659 | 4.3147% / 6.7372% |
 
 The old XLSX/ODS scores of 0.987544 and 0.995099 are withdrawn because white
 padding dominated them. The later unaligned sheet mean of 0.473395 is also not

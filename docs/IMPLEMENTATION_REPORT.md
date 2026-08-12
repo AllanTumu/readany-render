@@ -16,15 +16,15 @@ page, and JPEG honours EXIF orientation.
 | XLSX / XLSM | Natural-sheet display list plus bounded viewport raster/item APIs; cached values, geometry, merges, gridline view settings, opt-in headers, frozen-pane pixel extents, explicit styles, number formats, and omissions covered | Exhaustive exact cell text 1.000000 on both real sheets; text fidelity 0.978372 and 0.967207 across five distributed viewports |
 | ODS | Natural-sheet display list and viewport APIs; ODF styles, repeats, spans, gridline settings, opt-in headers, frozen-pane pixel extents, and explicit cell paint covered | Parser/golden/raster tests; no honest real ODS visual score currently claimed |
 | CSV / TSV | Encoding and separator sniffing plus RFC 4180 quoting | Parser/raster tests |
-| DOCX | Style cascade, shaping, pagination, lists, table paint, repeating parts, and images | Text fidelity 0.853182; mean / p95 box error 2.24 / 6.36 px |
-| ODT | Named/automatic styles, page geometry, lists, spans, and images | Text fidelity 0.607502; mean / p95 box error 6.90 / 12.35 px |
-| RTF | Scoped token stream, destinations, codepages, Unicode fallback, and formatting | Text fidelity 0.717480; exact text 1.000000 |
-| PPTX | Relationships, layout/master placeholder geometry, shapes, connectors, autofit, and images | Text fidelity 0.682948; mean / p95 box error 4.61 / 5.48 px |
-| ODP | Masters, named styles, explicit geometry, shapes, autofit, and images | Text fidelity 0.715689; mean / p95 box error 4.05 / 4.97 px |
+| DOCX | Style cascade, shaping, pagination, lists, table paint, repeating parts, and images | Real NIST chapter: 0.365007 exact text, 610.30 px p95, and 37 pages versus 34; materially unfaithful |
+| ODT | Named/automatic styles, page geometry, lists, spans, and images | Real UK IPO agreement: 0.148148 exact text, 864.96 px p95, and 3 pages versus 2; materially unfaithful |
+| RTF | Scoped token stream, destinations, codepages, Unicode fallback, and formatting | Synthetic `basic.rtf` only: 1.000000 exact text and 8.07 px p95 |
+| PPTX | Relationships, layout/master placeholder geometry, shapes, connectors, autofit, and images | Real NASA deck: all 11 slides, but 0.778898 exact text, 373.57 px p95, and two named unsupported EMFs; materially unfaithful |
+| ODP | Masters, named styles, explicit geometry, shapes, autofit, and images | Synthetic `basic.odp` only: 1.000000 exact text and 4.97 px p95 |
 | PDF / HEIC | Deliberate `DelegateToHost`; no misleading partial page | Official CFPB sample statement pins the PDF contract |
 | PNG / JPEG / GIF / BMP / WebP | Single inspectable image page with pixel ceiling and orientation | Photographed receipt pixel diagnostic is exact |
 
-The page-shaped text-fidelity mean is **0.715360**. The real spreadsheet mean is
+The page-shaped text-fidelity mean is **0.457618**. The real spreadsheet mean is
 **0.972789**. Exact cell text is **1.000000** for both Endo and OakPrism; sampled
 mean / p95 box errors are 0.26 / 0.27 px and 0.45 / 3.27 px. See
 `docs/FIDELITY.md` for the scoring definition and sampling boundary.
@@ -85,19 +85,24 @@ parser regression.
    absolute SSIM floors. Text-geometry regression is gated against the committed
    baseline with a 0.001 extractor-rounding allowance.
 5. The corpus contains the motivating Endo workbook, a second 1 MiB stress
-   workbook, a photographed receipt fixture, and an official public sample
-   statement. The statement is used to verify deliberate PDF delegation rather
-   than manufacturing a PDF fidelity score inside a non-PDF renderer.
+   workbook, a photographed receipt fixture, a 34-page NIST DOCX chapter, an
+   11-slide NASA PPTX, a two-page UK IPO ODT agreement, and an official public
+   sample statement. The statement is used to verify deliberate PDF delegation
+   rather than manufacturing a PDF fidelity score inside a non-PDF renderer.
 6. Spreadsheet publication additionally requires at least 99% exhaustive exact
    cell text and p95 sampled geometry drift no greater than 4 px. This hard bar
    runs even during an explicit baseline update.
+7. Every page document has a measured hard floor for exact text, p95 geometry,
+   and pagination. These run before the `--update` branch. The low real-document
+   floors preserve evidence against regression; they are explicitly not
+   publication-readiness targets.
 
 ## Incomplete-content evidence
 
 Every public `Unrendered` variant is pinned by a generated or real input:
 charts, pivots, conditional formatting, hidden sheets, uncached formulae,
-external references, unsupported glyphs, OLE, macros, host delegation, and
-limit truncation. Strict mode is separately pinned to stable error code
+external references, unsupported glyphs, unsupported slide media, OLE, macros,
+host delegation, and limit truncation. Strict mode is separately pinned to stable error code
 `RR-0302`, so partial content cannot masquerade as a complete render.
 
 ## Dependency correction

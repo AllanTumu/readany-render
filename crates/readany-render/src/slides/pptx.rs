@@ -67,7 +67,7 @@ pub(crate) fn render(bytes: &[u8], options: &Options<'_>) -> Result<Rendered, Re
         if let Some(layout) = layout {
             placeholders.extend(parse_placeholder_geometry(layout));
         }
-        pages.push(parse_slide(
+        let (page, page_unrendered) = parse_slide(
             &archive,
             xml_bytes,
             name_index as u32,
@@ -75,7 +75,9 @@ pub(crate) fn render(bytes: &[u8], options: &Options<'_>) -> Result<Rendered, Re
             &placeholders,
             &slide_relationships.targets,
             options.limits.image_pixels,
-        )?);
+        )?;
+        pages.push(page);
+        unrendered.extend(page_unrendered);
     }
     Ok(Rendered {
         pages,
@@ -202,7 +204,7 @@ fn parse_slide(
     placeholders: &BTreeMap<String, Rect>,
     relationships: &BTreeMap<String, String>,
     image_pixel_limit: u64,
-) -> Result<Page, RenderError> {
+) -> Result<(Page, Vec<Unrendered>), RenderError> {
     let mut reader = quick_xml::Reader::from_reader(bytes);
     let default_style = TextStyle {
         family: "Calibri".into(),
@@ -211,6 +213,7 @@ fn parse_slide(
     };
     let mut style = default_style.clone();
     let mut items = Vec::new();
+    let mut unsupported_media = BTreeMap::<String, u32>::new();
     let mut shape_index = 0_u32;
     let mut text = String::new();
     let mut in_t = false;
@@ -350,32 +353,41 @@ fn parse_slide(
                             "an embedded slide image is missing; obtain a fresh copy",
                         )
                     })?;
-                    let reader = image::ImageReader::new(std::io::Cursor::new(bytes))
-                        .with_guessed_format()
-                        .map_err(|_| {
-                            RenderError::malformed("an embedded slide image has a damaged header")
-                        })?;
-                    let (pixel_width, pixel_height) = reader.into_dimensions().map_err(|_| {
-                        RenderError::malformed("an embedded slide image has damaged dimensions")
-                    })?;
-                    let pixels = u64::from(pixel_width)
-                        .checked_mul(u64::from(pixel_height))
-                        .ok_or_else(|| RenderError::limit("image_pixels", u64::MAX))?;
-                    if pixels > image_pixel_limit {
-                        return Err(RenderError::limit("image_pixels", pixels));
-                    }
-                    shape_items.push(Item::Image(ImageItem {
-                        data: ImageData {
-                            mime: mime_for(target).into(),
-                            bytes: bytes.to_vec(),
-                            pixel_size: Size {
-                                width: pixel_width as f32,
-                                height: pixel_height as f32,
+                    if let Some(kind) = unsupported_media_kind(target) {
+                        *unsupported_media.entry(kind).or_default() += 1;
+                    } else {
+                        let reader = image::ImageReader::new(std::io::Cursor::new(bytes))
+                            .with_guessed_format()
+                            .map_err(|_| {
+                                RenderError::malformed(
+                                    "an embedded slide image has a damaged header",
+                                )
+                            })?;
+                        let (pixel_width, pixel_height) =
+                            reader.into_dimensions().map_err(|_| {
+                                RenderError::malformed(
+                                    "an embedded slide image has damaged dimensions",
+                                )
+                            })?;
+                        let pixels = u64::from(pixel_width)
+                            .checked_mul(u64::from(pixel_height))
+                            .ok_or_else(|| RenderError::limit("image_pixels", u64::MAX))?;
+                        if pixels > image_pixel_limit {
+                            return Err(RenderError::limit("image_pixels", pixels));
+                        }
+                        shape_items.push(Item::Image(ImageItem {
+                            data: ImageData {
+                                mime: mime_for(target).into(),
+                                bytes: bytes.to_vec(),
+                                pixel_size: Size {
+                                    width: pixel_width as f32,
+                                    height: pixel_height as f32,
+                                },
                             },
-                        },
-                        rect,
-                        source: Some(source.clone()),
-                    }));
+                            rect,
+                            source: Some(source.clone()),
+                        }));
+                    }
                 } else if shape_kind == b"cxnSp" || geometry == "line" {
                     shape_items.push(Item::Path(PathItem {
                         path: Path {
@@ -441,13 +453,33 @@ fn parse_slide(
             }
         }
     }
-    Ok(Page {
-        size,
-        label: Some(format!("Slide {}", slide + 1)),
-        items,
-        source: None,
-        frozen: None,
-    })
+    Ok((
+        Page {
+            size,
+            label: Some(format!("Slide {}", slide + 1)),
+            items,
+            source: None,
+            frozen: None,
+        },
+        unsupported_media
+            .into_iter()
+            .map(|(kind, count)| Unrendered::UnsupportedMedia {
+                page: slide,
+                kind,
+                count,
+            })
+            .collect(),
+    ))
+}
+
+fn unsupported_media_kind(target: &str) -> Option<String> {
+    let extension = target.rsplit_once('.')?.1;
+    match extension.to_ascii_lowercase().as_str() {
+        "svg" => Some("svg".into()),
+        "emf" => Some("emf".into()),
+        "wmf" => Some("wmf".into()),
+        _ => None,
+    }
 }
 
 fn parse_placeholder_geometry(bytes: &[u8]) -> BTreeMap<String, Rect> {

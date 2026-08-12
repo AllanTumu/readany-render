@@ -60,6 +60,7 @@ export type Unrendered =
   | { type: "FormulaWithoutCachedValue"; sheet: number; row: number; column: number }
   | { type: "ExternalReference"; target: string }
   | { type: "UnsupportedGlyphs"; script: string; count: number }
+  | { type: "UnsupportedMedia"; page: number; kind: string; count: number }
   | { type: "Ole"; page: number }
   | { type: "Macro" }
   | { type: "DelegateToHost"; format: Format }
