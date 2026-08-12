@@ -1038,3 +1038,50 @@ fn pptx_preserves_rich_text_lines_and_type_inherited_placeholder_geometry() {
     assert!(glyph(6, "7").origin.x > 1_170.0);
     assert!(glyph(6, "7").origin.y > 680.0);
 }
+
+/// PresentationML stores shapes in paint order.  It is not reading order: on
+/// NASA slide 9 two page numbers and the footer precede the title in XML even
+/// though LibreOffice exposes the title first and the footer/page number last.
+///
+/// **Falsified** by removing order_text_shapes: shape 4 follows shape 3.
+#[test]
+fn pptx_text_shapes_follow_visual_reading_order() {
+    let rendered = render(
+        &real_corpus("nasa-agency-report-2022.pptx"),
+        &Options {
+            filename: Some("nasa-agency-report-2022.pptx"),
+            ..Options::default()
+        },
+    )
+    .expect("the NASA presentation renders");
+    let shapes = rendered.pages[8]
+        .items
+        .iter()
+        .filter_map(|item| {
+            let Item::Group(group) = item else {
+                return None;
+            };
+            group
+                .items
+                .iter()
+                .any(|item| matches!(item, Item::Glyphs(_)))
+                .then(|| {
+                    let Some(readany_render::SourceRef::Shape { shape, .. }) = group.source else {
+                        panic!("a text-bearing slide group carries shape provenance");
+                    };
+                    shape
+                })
+        })
+        .collect::<Vec<_>>();
+    let position = |shape| {
+        shapes
+            .iter()
+            .position(|candidate| *candidate == shape)
+            .unwrap_or_else(|| panic!("shape {shape} is present"))
+    };
+    assert!(position(4) < position(3), "the title precedes the footer");
+    assert!(
+        position(3) < position(1),
+        "the footer precedes the page number"
+    );
+}

@@ -573,6 +573,7 @@ fn parse_slide(
             }
         }
     }
+    order_text_shapes(&mut items);
     Ok((
         Page {
             size,
@@ -591,6 +592,64 @@ fn parse_slide(
             })
             .collect(),
     ))
+}
+
+fn order_text_shapes(items: &mut Vec<Item>) {
+    let original = std::mem::take(items);
+    let mut slots = Vec::with_capacity(original.len());
+    let mut text_items = Vec::new();
+    for item in original {
+        if text_shape_origin(&item).is_some() {
+            text_items.push(item);
+            slots.push(None);
+        } else {
+            slots.push(Some(item));
+        }
+    }
+    // PresentationML's shape tree is z-order, not reading order.  LibreOffice
+    // exposes slide text top-to-bottom and then left-to-right; on NASA slide 9
+    // the XML order started with two bottom-right page numbers, which dropped
+    // sequence agreement to 0.679 even though the characters were present.
+    text_items.sort_by(
+        |left, right| match (text_shape_origin(left), text_shape_origin(right)) {
+            (Some(left), Some(right)) => left
+                .0
+                .total_cmp(&right.0)
+                .then_with(|| left.1.total_cmp(&right.1)),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => std::cmp::Ordering::Equal,
+        },
+    );
+    let mut text_items = text_items.into_iter();
+    for slot in slots {
+        match slot {
+            Some(item) => items.push(item),
+            None => {
+                if let Some(item) = text_items.next() {
+                    items.push(item);
+                }
+            }
+        }
+    }
+}
+
+fn text_shape_origin(item: &Item) -> Option<(f32, f32)> {
+    let Item::Group(group) = item else {
+        return None;
+    };
+    group
+        .items
+        .iter()
+        .filter_map(|item| {
+            let Item::Glyphs(run) = item else { return None };
+            Some((run.origin.y - run.size_px, run.origin.x))
+        })
+        .min_by(|left, right| {
+            left.0
+                .total_cmp(&right.0)
+                .then_with(|| left.1.total_cmp(&right.1))
+        })
 }
 
 fn unsupported_media_kind(target: &str) -> Option<String> {
