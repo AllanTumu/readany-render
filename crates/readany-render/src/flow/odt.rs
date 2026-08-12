@@ -76,7 +76,7 @@ impl StylePatch {
         overlay!(page_break_before);
     }
 
-    fn apply(&self, text: &mut TextStyle, paragraph: &mut ParagraphStyle) {
+    fn apply_text(&self, text: &mut TextStyle) {
         if let Some(family) = &self.family {
             text.family.clone_from(family);
         }
@@ -84,6 +84,9 @@ impl StylePatch {
         text.colour = self.colour.or(text.colour);
         text.bold = self.bold.unwrap_or(text.bold);
         text.italic = self.italic.unwrap_or(text.italic);
+    }
+
+    fn apply_paragraph(&self, paragraph: &mut ParagraphStyle) {
         paragraph.alignment = self.alignment.unwrap_or(paragraph.alignment);
         paragraph.left = self.left.unwrap_or(paragraph.left);
         paragraph.right = self.right.unwrap_or(paragraph.right);
@@ -105,6 +108,8 @@ struct StyleDef {
 }
 
 struct Styles {
+    default_paragraph: StylePatch,
+    has_default_paragraph: bool,
     definitions: BTreeMap<String, StyleDef>,
     page_size: Size,
     margins: (f32, f32, f32, f32),
@@ -113,6 +118,8 @@ struct Styles {
 impl Styles {
     fn parse(styles: Option<&[u8]>, content: &[u8]) -> Result<Self, RenderError> {
         let mut output = Self {
+            default_paragraph: StylePatch::default(),
+            has_default_paragraph: false,
             definitions: BTreeMap::new(),
             page_size: Size {
                 width: 793.7008,
@@ -130,20 +137,28 @@ impl Styles {
     fn parse_part(&mut self, bytes: &[u8]) -> Result<(), RenderError> {
         let mut reader = quick_xml::Reader::from_reader(bytes);
         let mut id = None::<String>;
+        let mut default_paragraph = false;
         let mut definition = StyleDef::default();
         loop {
             match reader.read_event() {
                 Ok(Event::Start(start)) => {
                     if xml::local_name(start.name().as_ref()) == b"style" {
                         id = attr(&start, b"name");
+                        default_paragraph = false;
                         definition = StyleDef {
                             parent: attr(&start, b"parent-style-name"),
                             patch: StylePatch::default(),
                         };
+                    } else if xml::local_name(start.name().as_ref()) == b"default-style"
+                        && attr(&start, b"family").as_deref() == Some("paragraph")
+                    {
+                        id = None;
+                        default_paragraph = true;
+                        definition = StyleDef::default();
                     } else {
                         apply_odf_property(
                             &start,
-                            id.as_ref().map(|_| &mut definition.patch),
+                            (id.is_some() || default_paragraph).then_some(&mut definition.patch),
                             &mut self.page_size,
                             &mut self.margins,
                         );
@@ -151,7 +166,7 @@ impl Styles {
                 }
                 Ok(Event::Empty(start)) => apply_odf_property(
                     &start,
-                    id.as_ref().map(|_| &mut definition.patch),
+                    (id.is_some() || default_paragraph).then_some(&mut definition.patch),
                     &mut self.page_size,
                     &mut self.margins,
                 ),
@@ -159,6 +174,14 @@ impl Styles {
                     if let Some(id) = id.take() {
                         self.definitions.insert(id, std::mem::take(&mut definition));
                     }
+                }
+                Ok(Event::End(end))
+                    if default_paragraph
+                        && xml::local_name(end.name().as_ref()) == b"default-style" =>
+                {
+                    self.default_paragraph = std::mem::take(&mut definition.patch);
+                    self.has_default_paragraph = true;
+                    default_paragraph = false;
                 }
                 Ok(Event::Eof) => break,
                 Ok(_) => {}
@@ -173,6 +196,29 @@ impl Styles {
     }
 
     fn resolve(&self, id: Option<&str>) -> (TextStyle, ParagraphStyle) {
+        let mut patch = self.default_paragraph.clone();
+        patch.overlay(&self.named_patch(id));
+        let mut text = default_text_style();
+        let mut paragraph = ParagraphStyle::default();
+        if self.has_default_paragraph {
+            paragraph.after = 0.0;
+            // The UK agreement advances 11 pt Arial lines by 12.65 pt in the
+            // LibreOffice reference; the generic 1.2 flow box is 13.2 pt.
+            paragraph.line_height_multiplier = 1.15;
+        }
+        patch.apply_text(&mut text);
+        patch.apply_paragraph(&mut paragraph);
+        (text, paragraph)
+    }
+
+    fn apply_text_style(&self, id: Option<&str>, text: &mut TextStyle) {
+        // A span is a delta on its paragraph's resolved text style.  Resolving
+        // it from scratch reset the UK agreement's Arial paragraphs to the
+        // renderer's Calibri default and changed every subsequent wrap.
+        self.named_patch(id).apply_text(text);
+    }
+
+    fn named_patch(&self, id: Option<&str>) -> StylePatch {
         let mut patch = StylePatch::default();
         let mut chain = Vec::new();
         let mut cursor = id;
@@ -190,10 +236,7 @@ impl Styles {
         for style in chain.into_iter().rev() {
             patch.overlay(&style.patch);
         }
-        let mut text = default_text_style();
-        let mut paragraph = ParagraphStyle::default();
-        patch.apply(&mut text, &mut paragraph);
-        (text, paragraph)
+        patch
     }
 }
 
@@ -314,7 +357,10 @@ fn parse_content(bytes: &[u8], styles: &Styles) -> Result<ParsedContent, RenderE
                 b"span" if active => {
                     flush_text(&mut runs, &mut text, &current_style);
                     style_stack.push(current_style.clone());
-                    current_style = styles.resolve(attr(&start, b"style-name").as_deref()).0;
+                    styles.apply_text_style(
+                        attr(&start, b"style-name").as_deref(),
+                        &mut current_style,
+                    );
                 }
                 b"list" => list_depth = list_depth.saturating_add(1),
                 b"frame" => {
@@ -348,19 +394,37 @@ fn parse_content(bytes: &[u8], styles: &Styles) -> Result<ParsedContent, RenderE
                 }
                 _ => {}
             },
-            Ok(Event::Empty(start)) if active => match xml::local_name(start.name().as_ref()) {
-                b"tab" => text.push('\t'),
-                b"line-break" => text.push('\n'),
-                b"s" => {
+            Ok(Event::Empty(start)) => match xml::local_name(start.name().as_ref()) {
+                b"p" | b"h" => {
+                    let (mut text_style, mut paragraph_style) =
+                        styles.resolve(attr(&start, b"style-name").as_deref());
+                    if xml::local_name(start.name().as_ref()) == b"h" {
+                        text_style.bold = true;
+                        if text_style.size_px <= 14.666_667 {
+                            text_style.size_px = 20.0;
+                        }
+                        paragraph_style.keep_next = true;
+                    }
+                    paragraphs.push(FlowParagraph {
+                        runs: vec![FlowRun {
+                            text: String::new(),
+                            style: text_style,
+                        }],
+                        style: paragraph_style,
+                    });
+                }
+                b"tab" if active => text.push('\t'),
+                b"line-break" if active => text.push('\n'),
+                b"s" if active => {
                     let count = attr(&start, b"c")
                         .and_then(|value| value.parse::<usize>().ok())
                         .unwrap_or(1)
                         .min(10_000);
                     text.extend(std::iter::repeat_n(' ', count));
                 }
-                b"page-number" => text.push('1'),
-                b"page-count" => text.push('1'),
-                b"image" => {
+                b"page-number" if active => text.push('1'),
+                b"page-count" if active => text.push('1'),
+                b"image" if active => {
                     if let (Some(rect), Some(path)) = (frame, attr(&start, b"href")) {
                         images.push(PendingImage {
                             path,

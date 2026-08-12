@@ -930,3 +930,69 @@ fn docx_line_pitch_and_top_spacing_match_the_reference_pagination() {
         "LibreOffice paginates the NIST chapter as 34 pages"
     );
 }
+
+/// ODF span styles are deltas on the paragraph style.  The UK agreement's
+/// default paragraph family is Arial and its automatic spans mostly change
+/// size or weight; resolving each span from scratch reset the family to
+/// Calibri/Carlito, narrowing lines and shifting later words by hundreds of
+/// pixels.
+///
+/// **Falsified** by ignoring `style:default-style`: the title run reports
+/// Carlito instead of the bundled Arial substitute.
+#[test]
+fn odt_span_styles_inherit_the_paragraph_font_family() {
+    let rendered = render(
+        &real_corpus("uk-ipo-one-way-nda.odt"),
+        &Options {
+            filename: Some("uk-ipo-one-way-nda.odt"),
+            ..Options::default()
+        },
+    )
+    .expect("the agreement renders");
+    let title = rendered.pages[0]
+        .items
+        .iter()
+        .find_map(|item| {
+            let Item::Glyphs(run) = item else {
+                return None;
+            };
+            run.text.starts_with("An Example").then_some(run)
+        })
+        .expect("the agreement title is present");
+    assert_eq!(title.family, "Liberation Sans");
+}
+
+/// An empty ODF paragraph is a line box, not zero height.  The agreement has
+/// one between its two-line title and date; omitting it leaves only about 20 px
+/// between their baselines instead of the measured 37 px.
+///
+/// **Falsified** by ignoring self-closing `text:p` elements: the baseline gap
+/// falls below 35 px.
+#[test]
+fn odt_empty_paragraphs_preserve_vertical_space() {
+    let rendered = render(
+        &real_corpus("uk-ipo-one-way-nda.odt"),
+        &Options {
+            filename: Some("uk-ipo-one-way-nda.odt"),
+            ..Options::default()
+        },
+    )
+    .expect("the agreement renders");
+    let glyph = |prefix: &str| {
+        rendered.pages[0]
+            .items
+            .iter()
+            .find_map(|item| {
+                let Item::Glyphs(run) = item else {
+                    return None;
+                };
+                run.text.starts_with(prefix).then_some(run)
+            })
+            .unwrap_or_else(|| panic!("{prefix:?} is present"))
+    };
+    let baseline_gap = glyph("Date:").origin.y - glyph("One-way").origin.y;
+    assert!(
+        baseline_gap > 35.0,
+        "the empty paragraph contributes its line box"
+    );
+}
