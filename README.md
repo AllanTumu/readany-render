@@ -55,11 +55,10 @@ does not mean visual fidelity has been demonstrated. Every claim below names
 the corpus behind it; results from one format are never generalized to another.
 
 **Read the flow-format rows carefully.** The page-aligned scores in
-`docs/FIDELITY.md` are computed page by page, so a pagination difference drags
-them down even where every character was read correctly. On the UK IPO
-agreement the text is character-identical to LibreOffice and the score is
-0.148; both facts are true and only one of them is about reading. The table
-below states which is which.
+`docs/FIDELITY.md` combine text identity with geometry. The August 13 fixes
+restore exact pagination for the real DOCX and ODT documents and materially
+improve all three flow/slide geometry scores, but the remaining p95 drift is
+still reported rather than promoted as publication readiness.
 
 | Format | Status | Evidence |
 | --- | --- | --- |
@@ -68,10 +67,10 @@ below states which is which.
 | ODS | Implemented; not real-corpus proven | Generated ODS fixtures and golden/raster tests only |
 | CSV | Implemented; parser-tested only | Generated quoted-field/newline fixtures only |
 | TSV | Implemented; parser-tested only | Generated delimiter fixtures only |
-| DOCX | Text complete, pagination not faithful | Real NIST chapter: character count within **0.2%** of reference and 89.7% document-wide sequence agreement, so the text is read. It paginates as 37 pages against 34, and the page-aligned score is 36.5% because of it. |
-| ODT | Proven on current corpus | Real UK IPO agreement: 3,171 characters against 3,171, similarity **1.0000**, and page-aligned fidelity **0.963** now that a `break-before` on the first paragraph no longer opens a blank page. |
+| DOCX | Pagination fixed; placement partial | Real NIST chapter: 34/34 pages, 0.802986 page-aligned exact text, 0.253570 geometry, and 561.48 px p95. Geometry rose from 0.017430 when pagination was fixed, but residual placement drift remains. |
+| ODT | Text and pagination proven; placement materially improved | Real UK IPO agreement: 3,171 characters against 3,171, 1.000000 page-aligned exact text, 2/2 pages, 0.800640 geometry, and 35.29 px p95. |
 | RTF | Implemented; synthetic evidence only | `basic.rtf`: 100% exact text, 8.07 px p95; no real RTF corpus document |
-| PPTX | Text complete, shape order not faithful | Real NASA deck: correct slide count and character count within **0.07%**, but 67.9% sequence agreement — the same text in a different order within a slide. Two EMF images are named as undrawn rather than omitted. |
+| PPTX | Reading order fixed; placement partial | Real NASA deck: 11/11 slides, 0.945187 exact text, 0.252692 geometry, and 237.07 px p95. Rich-text lines and visual shape order are preserved; two EMF images are named as undrawn rather than omitted. |
 | ODP | Implemented; synthetic evidence only | `basic.odp`: 100% exact text, 4.97 px p95; no real ODP corpus document |
 | PNG | Implemented; parser/raster tested | Generated image fixtures |
 | JPEG | Implemented; photographed evidence | Real photographed receipt plus EXIF-orientation fixtures |
@@ -93,9 +92,9 @@ and Liberation Sans/Serif/Mono faces plus DejaVu Sans, with their
 OFL/Bitstream licence texts. They substitute Calibri, Cambria, Arial/Helvetica,
 Times New Roman, and Courier New using compatible metrics.
 Browser builds support either `--features fonts` or the core build plus
-`addFont(bytes)`. Measured on 12 August 2026 on an Apple M4 Pro MacBook Pro (14
-cores, 24 GB, macOS 26.5.1, Rust 1.97.1), the release WASM is **1,583,532 bytes
-gzipped** without fonts (4 MiB budget) and **5,610,140 bytes gzipped** with
+`addFont(bytes)`. Measured on 13 August 2026 on an Apple M4 Pro MacBook Pro (14
+cores, 24 GB, macOS 26.5.1, Rust 1.97.1), the release WASM is **1,604,208 bytes
+gzipped** without fonts (4 MiB budget) and **5,632,353 bytes gzipped** with
 fonts (9 MiB budget).
 The root npm export works with ESM bundlers; `readany-render/no-bundler` exposes
 the same web initializer explicitly for direct browser imports. Both modes let
@@ -109,8 +108,8 @@ native tools and are the only filesystem users.
 ## Measured performance
 
 On the same machine and date, `./scripts/check-performance.sh` measured the
-generated 400 x 350 sheet at **439 ms**, the real Endo workbook parse at **241
-ms**, its 1,200 x 800 viewport raster at **41 ms**, the generated 100-page DOCX
+generated 400 x 350 sheet at **441 ms**, the real Endo workbook parse at **243
+ms**, its 1,200 x 800 viewport raster at **39 ms**, the generated 100-page DOCX
 at **1 ms**, and a small-page raster below the timer's 1 ms resolution. Budgets
 are 500 ms for sheet parsing, 100 ms for the real viewport, 3,000 ms for the
 100-page DOCX, and 100 ms for the small page.

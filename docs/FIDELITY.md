@@ -28,29 +28,29 @@ px**. Page-document floors are document-specific because the evidence is not
 uniform; they preserve the measured starting point but do not turn a poor
 starting point into a fidelity claim.
 
-Measured 12 August 2026:
+Measured 13 August 2026:
 
 | Corpus document | Exact | Geometry | Text fidelity | Mean / p95 error |
 | --- | ---: | ---: | ---: | ---: |
-| `basic.docx` | 1.000000 | 0.853182 | 0.853182 | 2.24 / 6.36 px |
+| `basic.docx` | 1.000000 | 0.959565 | 0.959565 | 0.50 / 1.16 px |
 | `basic.odp` | 1.000000 | 0.715689 | 0.715689 | 4.05 / 4.97 px |
 | `basic.odt` | 1.000000 | 0.607502 | 0.607502 | 6.90 / 12.35 px |
 | `basic.pptx` | 1.000000 | 0.682948 | 0.682948 | 4.61 / 5.48 px |
 | `basic.rtf` | 1.000000 | 0.717480 | 0.717480 | 4.30 / 8.07 px |
 | `endo-prem-2023.xlsx` | 1.000000 | 0.978372 | 0.978372 | 0.26 / 0.27 px |
-| `nasa-agency-report-2022.pptx` | 0.778898 | 0.098206 | 0.076492 | 162.40 / 373.57 px |
-| `nist-hb133-2026-chapter-2.docx` | 0.365007 | 0.017430 | 0.006362 | 226.55 / 610.30 px |
+| `nasa-agency-report-2022.pptx` | 0.945187 | 0.252692 | 0.238842 | 70.09 / 237.07 px |
+| `nist-hb133-2026-chapter-2.docx` | 0.802986 | 0.253570 | 0.203613 | 117.97 / 561.48 px |
 | `oakprism-stress-v3.xlsx` | 1.000000 | 0.967207 | 0.967207 | 0.45 / 3.27 px |
-| `uk-ipo-one-way-nda.odt` | 0.148148 | 0.008732 | 0.001294 | 347.64 / 864.96 px |
+| `uk-ipo-one-way-nda.odt` | 1.000000 | 0.800640 | 0.800640 | 13.16 / 35.29 px |
 
-The page-document text-fidelity mean is **0.457618** and the real-sheet mean is
+The page-document text-fidelity mean is **0.615785** and the real-sheet mean is
 **0.972789**. These remain regression evidence, not proof of universal format
 fidelity. CI rejects per-document or corpus regression beyond 0.001, requires
 baseline keys to match the corpus, and enforces both sets of hard floors.
 
 ### What the page-aligned figures do and do not say
 
-**Measured 12 August 2026, and they correct a misleading impression.** The
+**The 12 August starting measurements corrected a misleading impression.** The
 `exact` column above is computed **page by page**. When pagination diverges,
 every later page is compared against a reference page holding different content,
 so one early page break drags the whole score down. Read alone, `0.148` on the
@@ -63,27 +63,28 @@ ignored — against the same LibreOffice reference:
 
 | Corpus document | Page-aligned `exact` | Characters ours / reference | Document-wide similarity |
 | --- | ---: | ---: | ---: |
-| `uk-ipo-one-way-nda.odt` | 0.148148 → **0.9634** (fixed) | 3,171 / 3,171 | **1.000000** |
-| `nist-hb133-2026-chapter-2.docx` | 0.365007 | 65,997 / 65,843 | **0.897400** |
-| `nasa-agency-report-2022.pptx` | 0.778898 | 4,034 / 4,037 | 0.679200 |
+| `uk-ipo-one-way-nda.odt` | 0.148148 → **1.000000** | 3,171 / 3,171 | **1.000000** |
+| `nist-hb133-2026-chapter-2.docx` | 0.365007 → **0.802986** | 65,997 / 65,843 | **0.897400** |
+| `nasa-agency-report-2022.pptx` | 0.778898 → **0.945187** | 4,034 / 4,037 | 0.679200 at the starting z-order |
 
 Three different facts, and the single number hid all three:
 
-* **ODT is character-identical.** Every character, in order. Its defect was
-  pagination alone — three pages where LibreOffice makes two — and it is now
-  **fixed**. The agreement carries `fo:break-before="page"` on its very first
-  paragraph; honoured literally that opens the document with a blank page and
-  shifts every page after it. Word and LibreOffice both suppress a break before
-  the first block. Page-aligned fidelity went from **0.1481 to 0.9634** on that
-  one condition, which is the clearest possible demonstration that the score was
-  measuring placement rather than reading.
+* **ODT is character-identical.** Suppressing a break before the first block
+  first restored 2/2 pagination. Applying the ODF default paragraph style,
+  inheriting span deltas, and retaining self-closing paragraphs then raised
+  geometry from **0.111628 to 0.800640** and reduced p95 from **452.10 to
+  35.29 px**.
 * **DOCX reads within 0.2% of the reference character count** and agrees on
-  ~90% of the sequence. Its defect is pagination — 37 pages against 34, with
-  content distributed differently from the first page onward, where ours holds
-  1,076 characters and the reference holds 4,188.
+  ~90% of the document-wide sequence. Correct paragraph spacing, line pitch,
+  top-of-page spacing, and header/footer selection restored **34/34 pages**.
+  Geometry moved with that pagination fix, from **0.017430 to 0.253570**;
+  p95 fell from **610.30 to 561.48 px**, so pagination was a major cause but
+  not the only remaining DOCX placement error.
 * **PPTX reads within 0.07% of the character count** but agrees on only 68% of
-  the *sequence*. The same characters in a different order: shape ordering
-  within a slide, not missing content. Its slide count is already correct.
+  the starting document-wide sequence. Rich-text paragraphs are now laid out
+  as lines and text-bearing shapes use visual reading order rather than XML
+  paint order. Geometry rose from **0.098206 to 0.252692**, p95 fell from
+  **373.57 to 237.07 px**, and the slide count remains 11/11.
 
 So two questions were being answered by one number, and they have different
 answers:
@@ -91,7 +92,7 @@ answers:
 | Question | ODT | DOCX | PPTX |
 | --- | --- | --- | --- |
 | Was the text read? | completely | essentially completely | completely |
-| Was it placed correctly? | no — pagination | no — pagination | no — shape order |
+| Was it placed correctly? | materially improved; residual drift remains | pagination fixed; residual drift remains | ordering fixed; residual drift remains |
 
 **Neither figure is retracted and neither is promoted.** The page-aligned score
 remains the release gate, because placement is part of fidelity and a renderer
@@ -108,23 +109,20 @@ agreement. `pagination` is `min(ours, reference) / max(ours, reference)`.
 
 | Corpus document | Measured exact / minimum | Measured p95 / maximum | Pages ours / reference | Pagination / minimum |
 | --- | ---: | ---: | ---: | ---: |
-| `basic.docx` | 1.000000 / 0.99 | 6.36 / 6.50 px | 1 / 1 | 1.000000 / 1.00 |
+| `basic.docx` | 1.000000 / 0.99 | 1.16 / 6.50 px | 1 / 1 | 1.000000 / 1.00 |
 | `basic.odt` | 1.000000 / 0.99 | 12.35 / 12.50 px | 1 / 1 | 1.000000 / 1.00 |
 | `basic.rtf` | 1.000000 / 0.99 | 8.07 / 8.25 px | 1 / 1 | 1.000000 / 1.00 |
 | `basic.pptx` | 1.000000 / 0.99 | 5.48 / 5.60 px | 1 / 1 | 1.000000 / 1.00 |
 | `basic.odp` | 1.000000 / 0.99 | 4.97 / 5.10 px | 1 / 1 | 1.000000 / 1.00 |
-| `nist-hb133-2026-chapter-2.docx` | 0.365007 / 0.36 | 610.30 / 611.00 px | 37 / 34 | 0.918919 / 0.91 |
-| `nasa-agency-report-2022.pptx` | 0.778898 / 0.77 | 373.57 / 374.00 px | 11 / 11 | 1.000000 / 1.00 |
-| `uk-ipo-one-way-nda.odt` | 0.148148 / 0.14 | 864.96 / 866.00 px | 3 / 2 | 0.666667 / 0.66 |
+| `nist-hb133-2026-chapter-2.docx` | 0.802986 / 0.80 | 561.48 / 562.00 px | 34 / 34 | 1.000000 / 1.00 |
+| `nasa-agency-report-2022.pptx` | 0.945187 / 0.87 | 237.07 / 238.00 px | 11 / 11 | 1.000000 / 1.00 |
+| `uk-ipo-one-way-nda.odt` | 1.000000 / 0.99 | 35.29 / 36.00 px | 2 / 2 | 1.000000 / 1.00 |
 
-The real corpus answers the `basic.odt` question decisively. Its 0.608 geometry
-score was not evidence that ODT layout was nearly acceptable; the six-word,
-one-page fixture was too small to exercise pagination. The real UK agreement
-has only 14.8% exact text matching, 864.96 px p95 drift, and an extra page. DOCX
-has the same class of defect: the NIST chapter becomes 37 pages instead of 34,
-with major text loss/reordering and local drift. PPTX keeps the correct 11-slide
-count, but its 77.9% exact match, 373.57 px p95 drift, and explicit unsupported
-EMF evidence show that complex master/shape layout is not yet faithful.
+The real corpus still answers questions the synthetic fixtures cannot. ODT and
+DOCX now paginate exactly, and all three repaired formats materially improve
+their geometry, but the remaining 35.29, 561.48, and 237.07 px p95 errors are
+not publication-readiness claims. PPTX also retains explicit unsupported EMF
+evidence rather than silently dropping those assets.
 
 Only pages present on both sides contribute text and pixel measurements; extra
 or missing pages are measured separately by the pagination score. This avoids
@@ -140,17 +138,17 @@ images. A dimension difference above 2% is a hard failure before comparison.
 
 | Corpus document | Aligned SSIM | Ink, ours / reference |
 | --- | ---: | ---: |
-| `basic.docx` | 0.995943 | 0.1878% / 0.1944% |
+| `basic.docx` | 0.999202 | 0.1859% / 0.1944% |
 | `basic.odp` | 0.985421 | 8.7667% / 8.8467% |
 | `basic.odt` | 0.993403 | 0.1425% / 0.1992% |
-| `basic.pptx` | 0.996485 | 0.1082% / 0.1360% |
+| `basic.pptx` | 0.997029 | 0.1138% / 0.1360% |
 | `basic.rtf` | 0.995884 | 0.1133% / 0.1370% |
 | `endo-prem-2023.xlsx` | 0.733993 | 14.8375% / 6.7182% |
-| `nasa-agency-report-2022.pptx` | 0.752658 | 37.6333% / 78.3645% |
-| `nist-hb133-2026-chapter-2.docx` | 0.664051 | 6.5803% / 7.0554% |
+| `nasa-agency-report-2022.pptx` | 0.754455 | 44.3381% / 78.3646% |
+| `nist-hb133-2026-chapter-2.docx` | 0.679422 | 6.5714% / 7.0554% |
 | `oakprism-stress-v3.xlsx` | 0.677122 | 21.6146% / 13.9774% |
 | `receipt.jpg` | 1.000000 | 95.6258% / 95.6258% |
-| `uk-ipo-one-way-nda.odt` | 0.710659 | 4.3147% / 6.7372% |
+| `uk-ipo-one-way-nda.odt` | 0.934531 | 6.3837% / 6.7372% |
 
 The old XLSX/ODS scores of 0.987544 and 0.995099 are withdrawn because white
 padding dominated them. The later unaligned sheet mean of 0.473395 is also not

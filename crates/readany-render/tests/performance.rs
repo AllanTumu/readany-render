@@ -28,8 +28,10 @@ fn motivating_real_workbook_meets_the_display_list_and_viewport_budgets() {
     if cfg!(debug_assertions) {
         return;
     }
-    let path =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../corpus/real/endo-prem-2023.xlsx");
+    let path = std::env::var_os("READANY_RENDER_CORPUS")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../corpus/real"))
+        .join("endo-prem-2023.xlsx");
     let bytes = std::fs::read(path)
         .unwrap_or_else(|error| panic!("real workbook corpus is missing: {error}"));
     let started = Instant::now();

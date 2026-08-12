@@ -1,10 +1,10 @@
 {
   "basic.docx": {
     "pixel": {
-      "aligned_ssim": 0.9959431852092091,
+      "aligned_ssim": 0.9992024383314583,
       "offset_x": 0.0,
-      "offset_y": -3.0,
-      "ink_density_ours": 0.0018775473020647654,
+      "offset_y": -2.5,
+      "ink_density_ours": 0.0018591243315508022,
       "ink_density_reference": 0.0019442761716428995
     },
     "text": {
@@ -13,12 +13,12 @@
       "matched": 12,
       "mismatched_sources": 0,
       "exact_text": 1.0,
-      "geometry": 0.8531819118142829,
-      "combined": 0.8531819118142829,
+      "geometry": 0.9595651056759361,
+      "combined": 0.9595651056759361,
       "offset_x": -0.012232813199375414,
-      "offset_y": -1.6426651153564507,
-      "mean_error": 2.2365684007483204,
-      "p95_error": 6.356842656453882
+      "offset_y": -1.2759964141845757,
+      "mean_error": 0.5041885105312232,
+      "p95_error": 1.1601395927171174
     },
     "pagination": {
       "ours": 1,
@@ -82,10 +82,10 @@
   },
   "basic.pptx": {
     "pixel": {
-      "aligned_ssim": 0.9964849587658696,
+      "aligned_ssim": 0.9970289847068319,
       "offset_x": 0.0,
-      "offset_y": 2.0,
-      "ink_density_ours": 0.0010817112417969537,
+      "offset_y": -3.0,
+      "ink_density_ours": 0.0011384967018132535,
       "ink_density_reference": 0.001359860220744801
     },
     "text": {
@@ -96,8 +96,8 @@
       "exact_text": 1.0,
       "geometry": 0.6829475329790391,
       "combined": 0.6829475329790391,
-      "offset_x": 12.471200440000501,
-      "offset_y": 6.390502666666663,
+      "offset_x": 6.871201965879408,
+      "offset_y": 1.5904996149088504,
       "mean_error": 4.607653075378357,
       "p95_error": 5.478982317441176
     },
@@ -159,24 +159,24 @@
   },
   "nasa-agency-report-2022.pptx": {
     "pixel": {
-      "aligned_ssim": 0.7526581661948838,
-      "offset_x": 0.45454545454545453,
-      "offset_y": 0.36363636363636365,
-      "ink_density_ours": 0.37633253192591004,
-      "ink_density_reference": 0.7836450101127226
+      "aligned_ssim": 0.7544550703672018,
+      "offset_x": 0.3181818181818182,
+      "offset_y": 0.18181818181818182,
+      "ink_density_ours": 0.44338073883405493,
+      "ink_density_reference": 0.7836457741025229
     },
     "text": {
-      "ours": 1026,
+      "ours": 1440,
       "reference": 1552,
-      "matched": 1004,
+      "matched": 1414,
       "mismatched_sources": 0,
-      "exact_text": 0.7788983708301008,
-      "geometry": 0.09820557822259751,
-      "combined": 0.07649216488400923,
-      "offset_x": 2.204313371637129,
-      "offset_y": 33.87899307065764,
-      "mean_error": 162.40450912910632,
-      "p95_error": 373.56672297751624
+      "exact_text": 0.9451871657754011,
+      "geometry": 0.2526924908603851,
+      "combined": 0.23884169924905382,
+      "offset_x": 17.36888028927569,
+      "offset_y": 0.39059377313242344,
+      "mean_error": 70.0861250519033,
+      "p95_error": 237.06681564275092
     },
     "pagination": {
       "ours": 11,
@@ -186,29 +186,29 @@
   },
   "nist-hb133-2026-chapter-2.docx": {
     "pixel": {
-      "aligned_ssim": 0.6640511935049038,
-      "offset_x": 0.17647058823529413,
-      "offset_y": 0.23529411764705882,
-      "ink_density_ours": 0.06580266092204483,
+      "aligned_ssim": 0.6794219621379711,
+      "offset_x": 0.058823529411764705,
+      "offset_y": 0.25,
+      "ink_density_ours": 0.06571357958777876,
       "ink_density_reference": 0.07055359430704101
     },
     "text": {
-      "ours": 27162,
+      "ours": 26350,
       "reference": 25900,
-      "matched": 9684,
+      "matched": 20978,
       "mismatched_sources": 0,
-      "exact_text": 0.3650069729750104,
-      "geometry": 0.0174298773703201,
-      "combined": 0.006362026778266174,
-      "offset_x": 9.609881292461237,
-      "offset_y": -13.567656305558152,
-      "mean_error": 226.55344558251784,
-      "p95_error": 610.2979295199193
+      "exact_text": 0.8029856459330144,
+      "geometry": 0.25356996137793236,
+      "combined": 0.20361303922626853,
+      "offset_x": -4.437449143699612,
+      "offset_y": 140.11709691006482,
+      "mean_error": 117.96552330503906,
+      "p95_error": 561.4816429852431
     },
     "pagination": {
-      "ours": 37,
+      "ours": 34,
       "reference": 34,
-      "ratio": 0.918918918918919
+      "ratio": 1.0
     }
   },
   "oakprism-stress-v3.xlsx": {
@@ -247,24 +247,24 @@
   },
   "uk-ipo-one-way-nda.odt": {
     "pixel": {
-      "aligned_ssim": 0.745548544889993,
+      "aligned_ssim": 0.9345305413444619,
       "offset_x": 0.0,
-      "offset_y": -2.25,
-      "ink_density_ours": 0.05461297274079192,
+      "offset_y": 1.0,
+      "ink_density_ours": 0.063836829426397,
       "ink_density_reference": 0.06737208157351103
     },
     "text": {
       "ours": 1122,
       "reference": 1122,
-      "matched": 1076,
+      "matched": 1122,
       "mismatched_sources": 0,
-      "exact_text": 0.9590017825311943,
-      "geometry": 0.11162834720112687,
-      "combined": 0.10705178394689172,
-      "offset_x": 27.09543824306453,
-      "offset_y": 28.764761138618308,
-      "mean_error": 79.30113209864744,
-      "p95_error": 452.09966454763406
+      "exact_text": 1.0,
+      "geometry": 0.8006404188978736,
+      "combined": 0.8006404188978736,
+      "offset_x": 0.01612995180595319,
+      "offset_y": 2.0567563982699797,
+      "mean_error": 13.161193446328177,
+      "p95_error": 35.292502415712995
     },
     "pagination": {
       "ours": 2,

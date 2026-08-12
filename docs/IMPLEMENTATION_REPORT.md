@@ -1,6 +1,6 @@
 # Implementation report
 
-Measured on 12 August 2026 on an Apple M4 Pro MacBook Pro (14 cores, 24 GB,
+Measured on 13 August 2026 on an Apple M4 Pro MacBook Pro (14 cores, 24 GB,
 macOS 26.5.1) with Rust 1.97.1. This report supersedes the earlier acceptance
 report: its spreadsheet fidelity figures were invalid because incomparable
 canvases were padded with white pixels.
@@ -17,15 +17,15 @@ page, and JPEG honours EXIF orientation.
 | XLSX / XLSM | Natural-sheet display list plus bounded viewport raster/item APIs; cached values, geometry, merges, gridline view settings, opt-in headers, frozen-pane pixel extents, explicit styles, number formats, and omissions covered | Exhaustive exact cell text 1.000000 on both real sheets; text fidelity 0.978372 and 0.967207 across five distributed viewports |
 | ODS | Natural-sheet display list and viewport APIs; ODF styles, repeats, spans, gridline settings, opt-in headers, frozen-pane pixel extents, and explicit cell paint covered | Parser/golden/raster tests; no honest real ODS visual score currently claimed |
 | CSV / TSV | Encoding and separator sniffing plus RFC 4180 quoting | Parser/raster tests |
-| DOCX | Style cascade, shaping, pagination, lists, table paint, repeating parts, and images | Real NIST chapter: 0.365007 exact text, 610.30 px p95, and 37 pages versus 34; materially unfaithful |
-| ODT | Named/automatic styles, page geometry, lists, spans, and images | Real UK IPO agreement: 0.148148 exact text, 864.96 px p95, and 3 pages versus 2; materially unfaithful |
+| DOCX | Style cascade, shaping, pagination, lists, table paint, repeating parts, and images | Real NIST chapter: 0.802986 exact text, 561.48 px p95, and 34/34 pages; pagination fixed, residual placement drift remains |
+| ODT | Default/named/automatic styles, page geometry, lists, inherited spans, empty paragraphs, and images | Real UK IPO agreement: 1.000000 exact text, 35.29 px p95, and 2/2 pages |
 | RTF | Scoped token stream, destinations, codepages, Unicode fallback, and formatting | Synthetic `basic.rtf` only: 1.000000 exact text and 8.07 px p95 |
-| PPTX | Relationships, layout/master placeholder geometry, shapes, connectors, autofit, and images | Real NASA deck: all 11 slides, but 0.778898 exact text, 373.57 px p95, and two named unsupported EMFs; materially unfaithful |
+| PPTX | Relationships, dual-key layout/master placeholder geometry, rich-text line layout, visual reading order, shapes, connectors, and images | Real NASA deck: 11/11 slides, 0.945187 exact text, 237.07 px p95, and two named unsupported EMFs; residual placement drift remains |
 | ODP | Masters, named styles, explicit geometry, shapes, autofit, and images | Synthetic `basic.odp` only: 1.000000 exact text and 4.97 px p95 |
 | PDF / HEIC | Deliberate `DelegateToHost`; no misleading partial page | Official CFPB sample statement pins the PDF contract |
 | PNG / JPEG / GIF / BMP / WebP | Single inspectable image page with pixel ceiling and orientation | Photographed receipt pixel diagnostic is exact |
 
-The page-shaped text-fidelity mean is **0.457618**. The real spreadsheet mean is
+The page-shaped text-fidelity mean is **0.615785**. The real spreadsheet mean is
 **0.972789**. Exact cell text is **1.000000** for both Endo and OakPrism; sampled
 mean / p95 box errors are 0.26 / 0.27 px and 0.45 / 3.27 px. See
 `docs/FIDELITY.md` for the scoring definition and sampling boundary.
@@ -54,16 +54,16 @@ The full Endo and generated-wide sheet rasters still correctly fail above the
 
 | Build | Measured gzip size | Budget | Result |
 | --- | ---: | ---: | --- |
-| Core WASM, no bundled fonts | 1,583,532 bytes | 4,194,304 bytes | pass |
-| WASM with bundled fonts | 5,610,140 bytes | 9,437,184 bytes | pass |
+| Core WASM, no bundled fonts | 1,604,208 bytes | 4,194,304 bytes | pass |
+| WASM with bundled fonts | 5,632,353 bytes | 9,437,184 bytes | pass |
 
 ## Performance
 
 | Gate | Measured | Budget | Result |
 | --- | ---: | ---: | --- |
-| Generated 400 x 350 XLSX to display list | 439 ms | 500 ms | pass |
-| Real Endo workbook to display list | 241 ms | 500 ms | pass |
-| Real Endo 1,200 x 800 viewport raster | 41 ms | 100 ms | pass |
+| Generated 400 x 350 XLSX to display list | 441 ms | 500 ms | pass |
+| Real Endo workbook to display list | 243 ms | 500 ms | pass |
+| Real Endo 1,200 x 800 viewport raster | 39 ms | 100 ms | pass |
 | 100-page DOCX to display list | 1 ms | 3,000 ms | pass |
 | One small page raster | <1 ms | 100 ms | pass |
 
@@ -94,9 +94,10 @@ parser regression.
    cell text and p95 sampled geometry drift no greater than 4 px. This hard bar
    runs even during an explicit baseline update.
 7. Every page document has a measured hard floor for exact text, p95 geometry,
-   and pagination. These run before the `--update` branch. The low real-document
-   floors preserve evidence against regression; they are explicitly not
-   publication-readiness targets.
+   and pagination. These run before the `--update` branch. The repaired real
+   document floors now require exact pagination and preserve the improved
+   placement evidence; they remain regression floors, not publication-readiness
+   targets.
 
 ## Incomplete-content evidence
 

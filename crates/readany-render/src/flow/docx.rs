@@ -38,14 +38,16 @@ pub(crate) fn render(bytes: &[u8], options: &Options<'_>) -> Result<crate::Rende
     )?;
     paint_tables(&parsed.tables, parsed.margins, &mut rendered);
     paint_repeating_parts(
-        &archive,
-        document,
-        &relationships.targets,
-        &styles,
-        &numbering,
+        &RepeatingPartContext {
+            archive: &archive,
+            document,
+            relationships: &relationships.targets,
+            styles: &styles,
+            numbering: &numbering,
+            options,
+        },
         &mut rendered,
         parsed.margins,
-        options,
     )?;
     paint_images(
         &archive,
@@ -71,24 +73,28 @@ pub(crate) fn render(bytes: &[u8], options: &Options<'_>) -> Result<crate::Rende
     Ok(rendered)
 }
 
+struct RepeatingPartContext<'a, 'font> {
+    archive: &'a Archive,
+    document: &'a [u8],
+    relationships: &'a BTreeMap<String, String>,
+    styles: &'a StyleSheet,
+    numbering: &'a Numbering,
+    options: &'a Options<'font>,
+}
+
 fn paint_repeating_parts(
-    archive: &Archive,
-    document: &[u8],
-    relationships: &BTreeMap<String, String>,
-    styles: &StyleSheet,
-    numbering: &Numbering,
+    context: &RepeatingPartContext<'_, '_>,
     rendered: &mut crate::Rendered,
     margins: Margins,
-    options: &Options<'_>,
 ) -> Result<(), RenderError> {
-    let parts = parse_repeating_parts(document, relationships)?;
+    let parts = parse_repeating_parts(context.document, context.relationships)?;
     let names = parts.targets().map(str::to_owned).collect::<BTreeSet<_>>();
     let mut laid_out = BTreeMap::<String, Vec<Item>>::new();
     for name in names {
-        let Some(bytes) = archive.get(&name) else {
+        let Some(bytes) = context.archive.get(&name) else {
             continue;
         };
-        let parsed = parse_part(bytes, styles, numbering)?;
+        let parsed = parse_part(bytes, context.styles, context.numbering)?;
         let header = name.starts_with("word/header");
         let vertical = if header { 24.0 } else { 48.0 };
         let part_margins = if header {
@@ -109,7 +115,7 @@ fn paint_repeating_parts(
         let part = layout_flow(
             &parsed.paragraphs,
             Format::Docx,
-            options,
+            context.options,
             rendered.pages[0].size,
             part_margins,
         )?;

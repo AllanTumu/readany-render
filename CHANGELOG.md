@@ -53,6 +53,12 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Page-document fidelity now measures every page shared with the reference and
   records extra or missing pages independently instead of assuming page counts
   match.
+- DOCX paragraph pitch, boundary spacing, and referenced odd/even repeating
+  parts now reproduce the real NIST chapter's 34-page pagination.
+- ODT applies default paragraph styles to named styles and span deltas, and
+  retains self-closing paragraphs as visible line boxes.
+- PPTX preserves rich-text paragraphs and runs, resolves remapped placeholders
+  by index and type, and orders text-bearing shapes for visual reading.
 
 ### Removed
 
