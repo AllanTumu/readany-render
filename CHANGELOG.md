@@ -5,6 +5,30 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-08-13
+
+### Changed
+
+- The two private corpus workbooks are described by shape rather than by name.
+  Their filenames disclosed what the data was — "endo" with PREM/PROM together
+  say endometriosis patient-reported outcome measures — which is the one thing
+  keeping the files out of the repository was meant to avoid saying. A filename
+  is disclosure even when the file is absent. They are now `sheet-a.xlsx` and
+  `sheet-b.xlsx`, 393 rows by 328 columns and the wider of the two.
+- The status table reports ODT as proven: 1.0000 exact text, 0.8006 geometry,
+  35.29 px p95, and pagination matching the reference. DOCX and PPTX moved from
+  broken to poor rather than to fixed, and say so.
+
+### Fixed
+
+- Flow and slide placement. DOCX paginates 34 pages against 34, exact text
+  0.3650 to 0.8030. ODT geometry 0.1116 to 0.8006. PPTX reading order and rich
+  text placement, exact text 0.7789 to 0.9452.
+- A page break before the first block no longer opens a blank page.
+
+No published artefact contained the corpus at 0.1.0 or at any version; this
+release changes documentation and layout, not what ships in the package.
+
 ### Added
 
 - Deterministic display-list model with cell, paragraph, and shape provenance.
