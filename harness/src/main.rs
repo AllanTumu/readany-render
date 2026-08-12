@@ -33,13 +33,47 @@ const PAGE_CORPUS: &[(&str, &str)] = &[
     ),
 ];
 
-const SHEET_CORPUS: &[(&str, &str)] = &[
-    ("endo-prem-2023.xlsx", "corpus/real/endo-prem-2023.xlsx"),
-    (
-        "oakprism-stress-v3.xlsx",
-        "corpus/real/oakprism-stress-v3.xlsx",
-    ),
-];
+/// The sheet corpus, which is **not in this repository**.
+///
+/// Both workbooks carry real survey responses — `PROM`/`PREM` patient measures
+/// in one, and `participant_code`, `case_reference`, `access_token` and
+/// `IP Address` columns in the other. That is personal data and in one case
+/// health data; it may not be redistributed, and a public repository is not a
+/// place to keep it however carefully its provenance is described.
+///
+/// They live outside the checkout and are found through
+/// `READANY_RENDER_CORPUS`. The same shape `readany-verify` uses for
+/// `STATEMENT_TEST_FILES`, and for the same reason.
+const SHEET_CORPUS: &[&str] = &["endo-prem-2023.xlsx", "oakprism-stress-v3.xlsx"];
+
+/// Where the private sheet corpus is, or why the run has none.
+///
+/// **Absent is refused, not skipped.** A fidelity gate that quietly measures
+/// nothing reports a pass over an empty set, which is the failure the whole
+/// harness exists to prevent. A run without the corpus must say so out loud by
+/// setting `READANY_RENDER_CORPUS_ABSENT=1`, and then the sheet gate is
+/// reported as not run rather than as met.
+fn sheet_corpus_dir() -> Result<Option<PathBuf>, Box<dyn std::error::Error>> {
+    if let Ok(dir) = std::env::var("READANY_RENDER_CORPUS") {
+        let path = PathBuf::from(dir);
+        if !path.is_dir() {
+            return Err(format!(
+                "READANY_RENDER_CORPUS is set to {} which is not a directory",
+                path.display()
+            )
+            .into());
+        }
+        return Ok(Some(path));
+    }
+    if std::env::var("READANY_RENDER_CORPUS_ABSENT").as_deref() == Ok("1") {
+        return Ok(None);
+    }
+    Err("READANY_RENDER_CORPUS is not set, so the spreadsheet fidelity gate \
+         would be asserted over no documents at all. Point it at the private \
+         corpus, or set READANY_RENDER_CORPUS_ABSENT=1 to declare that this \
+         run has none."
+        .into())
+}
 
 const IMAGE_CORPUS: &[(&str, &str)] = &[("receipt.jpg", "corpus/real/receipt.jpg")];
 const SHEET_MIN_EXACT_TEXT: f64 = 0.99;
@@ -212,9 +246,19 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&work)?;
     let mut scores = BTreeMap::new();
     let mut contact_rows = Vec::new();
-    for (name, relative_path) in SHEET_CORPUS {
-        let source = root.join(relative_path);
-        let bytes = std::fs::read(&source)?;
+    let corpus_dir = sheet_corpus_dir()?;
+    for name in SHEET_CORPUS {
+        let Some(dir) = corpus_dir.as_ref() else {
+            eprintln!(
+                "{name}: skipped — READANY_RENDER_CORPUS_ABSENT=1, so the \
+                 spreadsheet gate did not run"
+            );
+            continue;
+        };
+        let source = dir.join(name);
+        let bytes = std::fs::read(&source).map_err(|error| {
+            format!("{}: {error}", source.display())
+        })?;
         let rendered = render(
             &bytes,
             &Options {
@@ -440,7 +484,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     let sheet_text_mean = mean_for(
         &scores,
-        SHEET_CORPUS.iter().map(|(name, _)| *name),
+        SHEET_CORPUS.iter().copied(),
         |score| score.text.as_ref().map(|text| text.combined),
     )?;
     let aligned_ssim_mean = scores
@@ -544,9 +588,10 @@ fn enforce_page_publish_bar(
 fn enforce_sheet_publish_bar(
     scores: &BTreeMap<String, Score>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    for (name, _) in SHEET_CORPUS {
-        let text = scores
-            .get(*name)
+    for name in SHEET_CORPUS {
+        // Absent because the corpus is absent — already said out loud above.
+        let Some(score) = scores.get(*name) else { continue };
+        let text = Some(score)
             .and_then(|score| score.text.as_ref())
             .ok_or_else(|| format!("{name} has no spreadsheet text evidence"))?;
         if text.exact_text < SHEET_MIN_EXACT_TEXT || text.p95_error > SHEET_MAX_P95_ERROR_PX {
@@ -1788,16 +1833,16 @@ mod tests {
         };
         let passing = SHEET_CORPUS
             .iter()
-            .map(|(name, _)| ((*name).to_owned(), score(0.99, 4.0)))
+            .map(|name| ((*name).to_owned(), score(0.99, 4.0)))
             .collect();
         assert!(enforce_sheet_publish_bar(&passing).is_ok());
 
         let mut text_loss = passing.clone();
-        text_loss.insert(SHEET_CORPUS[0].0.into(), score(0.989, 1.0));
+        text_loss.insert(SHEET_CORPUS[0].into(), score(0.989, 1.0));
         assert!(enforce_sheet_publish_bar(&text_loss).is_err());
 
         let mut drift = passing;
-        drift.insert(SHEET_CORPUS[1].0.into(), score(1.0, 4.01));
+        drift.insert(SHEET_CORPUS[1].into(), score(1.0, 4.01));
         assert!(enforce_sheet_publish_bar(&drift).is_err());
     }
 
