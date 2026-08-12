@@ -48,6 +48,52 @@ The page-document text-fidelity mean is **0.457618** and the real-sheet mean is
 fidelity. CI rejects per-document or corpus regression beyond 0.001, requires
 baseline keys to match the corpus, and enforces both sets of hard floors.
 
+### What the page-aligned figures do and do not say
+
+**Measured 12 August 2026, and they correct a misleading impression.** The
+`exact` column above is computed **page by page**. When pagination diverges,
+every later page is compared against a reference page holding different content,
+so one early page break drags the whole score down. Read alone, `0.148` on the
+UK IPO agreement suggests the reader recovered a seventh of the text. It did
+not. It recovered all of it.
+
+Comparing the same documents **document-wide** — whitespace collapsed, Symbol
+private-use bullet glyphs dropped, Unicode NFKC-normalised, page boundaries
+ignored — against the same LibreOffice reference:
+
+| Corpus document | Page-aligned `exact` | Characters ours / reference | Document-wide similarity |
+| --- | ---: | ---: | ---: |
+| `uk-ipo-one-way-nda.odt` | 0.148148 | 3,171 / 3,171 | **1.000000** |
+| `nist-hb133-2026-chapter-2.docx` | 0.365007 | 65,997 / 65,843 | **0.897400** |
+| `nasa-agency-report-2022.pptx` | 0.778898 | 4,034 / 4,037 | 0.679200 |
+
+Three different facts, and the single number hid all three:
+
+* **ODT is character-identical.** Every character, in order. Its defect is
+  pagination alone: three pages where LibreOffice makes two.
+* **DOCX reads within 0.2% of the reference character count** and agrees on
+  ~90% of the sequence. Its defect is pagination — 37 pages against 34, with
+  content distributed differently from the first page onward, where ours holds
+  1,076 characters and the reference holds 4,188.
+* **PPTX reads within 0.07% of the character count** but agrees on only 68% of
+  the *sequence*. The same characters in a different order: shape ordering
+  within a slide, not missing content. Its slide count is already correct.
+
+So two questions were being answered by one number, and they have different
+answers:
+
+| Question | ODT | DOCX | PPTX |
+| --- | --- | --- | --- |
+| Was the text read? | completely | essentially completely | completely |
+| Was it placed correctly? | no — pagination | no — pagination | no — shape order |
+
+**Neither figure is retracted and neither is promoted.** The page-aligned score
+remains the release gate, because placement is part of fidelity and a renderer
+that puts the right words on the wrong page has not rendered the document. What
+changes is that it is no longer reported as though it measured reading. A README
+that said "36.5% exact text" and nothing else would have understated this
+library to the point of dishonesty in the other direction.
+
 ### Page-document evidence floors
 
 Each row shows the measurement followed by the rounded hard floor derived from

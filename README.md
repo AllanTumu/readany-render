@@ -54,6 +54,13 @@ refuses full canvases above 100 million pixels.
 does not mean visual fidelity has been demonstrated. Every claim below names
 the corpus behind it; results from one format are never generalized to another.
 
+**Read the flow-format rows carefully.** The page-aligned scores in
+`docs/FIDELITY.md` are computed page by page, so a pagination difference drags
+them down even where every character was read correctly. On the UK IPO
+agreement the text is character-identical to LibreOffice and the score is
+0.148; both facts are true and only one of them is about reading. The table
+below states which is which.
+
 | Format | Status | Evidence |
 | --- | --- | --- |
 | XLSX | Proven on current corpus | Endo and OakPrism real workbooks: 100% exhaustive exact cell text; sampled geometry p95 0.27 px and 3.27 px |
@@ -61,10 +68,10 @@ the corpus behind it; results from one format are never generalized to another.
 | ODS | Implemented; not real-corpus proven | Generated ODS fixtures and golden/raster tests only |
 | CSV | Implemented; parser-tested only | Generated quoted-field/newline fixtures only |
 | TSV | Implemented; parser-tested only | Generated delimiter fixtures only |
-| DOCX | Material fidelity defects | Real 34-page NIST chapter renders as 37 pages: 36.5% exact text, 610.30 px p95 |
-| ODT | Material fidelity defects | Real two-page UK IPO agreement renders as three pages: 14.8% exact text, 864.96 px p95 |
+| DOCX | Text complete, pagination not faithful | Real NIST chapter: character count within **0.2%** of reference and 89.7% document-wide sequence agreement, so the text is read. It paginates as 37 pages against 34, and the page-aligned score is 36.5% because of it. |
+| ODT | Text **character-identical**, pagination not faithful | Real UK IPO agreement: 3,171 characters against 3,171, similarity **1.0000**. It paginates as three pages against two, and the page-aligned score is 14.8% entirely because of that. |
 | RTF | Implemented; synthetic evidence only | `basic.rtf`: 100% exact text, 8.07 px p95; no real RTF corpus document |
-| PPTX | Material fidelity defects | Real 11-slide NASA deck: correct slide count, 77.9% exact text, 373.57 px p95, two named unsupported EMFs |
+| PPTX | Text complete, shape order not faithful | Real NASA deck: correct slide count and character count within **0.07%**, but 67.9% sequence agreement — the same text in a different order within a slide. Two EMF images are named as undrawn rather than omitted. |
 | ODP | Implemented; synthetic evidence only | `basic.odp`: 100% exact text, 4.97 px p95; no real ODP corpus document |
 | PNG | Implemented; parser/raster tested | Generated image fixtures |
 | JPEG | Implemented; photographed evidence | Real photographed receipt plus EXIF-orientation fixtures |
