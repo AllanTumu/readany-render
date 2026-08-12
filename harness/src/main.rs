@@ -68,11 +68,13 @@ fn sheet_corpus_dir() -> Result<Option<PathBuf>, Box<dyn std::error::Error>> {
     if std::env::var("READANY_RENDER_CORPUS_ABSENT").as_deref() == Ok("1") {
         return Ok(None);
     }
-    Err("READANY_RENDER_CORPUS is not set, so the spreadsheet fidelity gate \
+    Err(
+        "READANY_RENDER_CORPUS is not set, so the spreadsheet fidelity gate \
          would be asserted over no documents at all. Point it at the private \
          corpus, or set READANY_RENDER_CORPUS_ABSENT=1 to declare that this \
          run has none."
-        .into())
+            .into(),
+    )
 }
 
 const IMAGE_CORPUS: &[(&str, &str)] = &[("receipt.jpg", "corpus/real/receipt.jpg")];
@@ -256,9 +258,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         };
         let source = dir.join(name);
-        let bytes = std::fs::read(&source).map_err(|error| {
-            format!("{}: {error}", source.display())
-        })?;
+        let bytes =
+            std::fs::read(&source).map_err(|error| format!("{}: {error}", source.display()))?;
         let rendered = render(
             &bytes,
             &Options {
@@ -482,11 +483,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         PAGE_CORPUS.iter().map(|(name, _)| *name),
         |score| score.text.as_ref().map(|text| text.combined),
     )?;
-    let sheet_text_mean = mean_for(
-        &scores,
-        SHEET_CORPUS.iter().copied(),
-        |score| score.text.as_ref().map(|text| text.combined),
-    )?;
+    let sheet_text_mean = mean_for(&scores, SHEET_CORPUS.iter().copied(), |score| {
+        score.text.as_ref().map(|text| text.combined)
+    })?;
     let aligned_ssim_mean = scores
         .values()
         .map(|score| score.pixel.aligned_ssim)
@@ -590,7 +589,9 @@ fn enforce_sheet_publish_bar(
 ) -> Result<(), Box<dyn std::error::Error>> {
     for name in SHEET_CORPUS {
         // Absent because the corpus is absent — already said out loud above.
-        let Some(score) = scores.get(*name) else { continue };
+        let Some(score) = scores.get(*name) else {
+            continue;
+        };
         let text = Some(score)
             .and_then(|score| score.text.as_ref())
             .ok_or_else(|| format!("{name} has no spreadsheet text evidence"))?;

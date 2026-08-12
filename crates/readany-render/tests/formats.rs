@@ -22,6 +22,20 @@ fn real_corpus(name: &str) -> Vec<u8> {
     .unwrap_or_else(|error| panic!("real corpus file {name} is missing: {error}"))
 }
 
+/// A workbook from the **private** corpus, which is not in this repository.
+///
+/// `None` when `READANY_RENDER_CORPUS` is unset, so a public checkout runs
+/// every other test rather than failing on data it cannot have. The tests that
+/// need one say so by returning early — and say it out loud on stderr, because
+/// a test that silently becomes a no-op is a test that stops being one.
+fn private_corpus(name: &str) -> Option<Vec<u8>> {
+    let dir = std::env::var("READANY_RENDER_CORPUS").ok()?;
+    match std::fs::read(PathBuf::from(dir).join(name)) {
+        Ok(bytes) => Some(bytes),
+        Err(error) => panic!("READANY_RENDER_CORPUS is set but {name} is missing: {error}"),
+    }
+}
+
 #[test]
 fn a_real_statement_is_explicitly_delegated_instead_of_looking_rendered() {
     let rendered = render(
@@ -43,8 +57,15 @@ fn a_real_statement_is_explicitly_delegated_instead_of_looking_rendered() {
 
 #[test]
 fn xlsx_declared_default_row_height_controls_sheet_geometry() {
+    let Some(bytes) = private_corpus("oakprism-stress-v3.xlsx") else {
+        eprintln!(
+            "skipped: READANY_RENDER_CORPUS is unset, so the private stress \
+             workbook is unavailable"
+        );
+        return;
+    };
     let rendered = render(
-        &real_corpus("oakprism-stress-v3.xlsx"),
+        &bytes,
         &Options {
             filename: Some("oakprism-stress-v3.xlsx"),
             ..Options::default()
