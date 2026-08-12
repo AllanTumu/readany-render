@@ -67,10 +67,10 @@ still reported rather than promoted as publication readiness.
 | ODS | Implemented; not real-corpus proven | Generated ODS fixtures and golden/raster tests only |
 | CSV | Implemented; parser-tested only | Generated quoted-field/newline fixtures only |
 | TSV | Implemented; parser-tested only | Generated delimiter fixtures only |
-| DOCX | Pagination fixed; placement partial | Real NIST chapter: 34/34 pages, 0.802986 page-aligned exact text, 0.253570 geometry, and 561.48 px p95. Geometry rose from 0.017430 when pagination was fixed, but residual placement drift remains. |
-| ODT | Text and pagination proven; placement materially improved | Real UK IPO agreement: 3,171 characters against 3,171, 1.000000 page-aligned exact text, 2/2 pages, 0.800640 geometry, and 35.29 px p95. |
+| DOCX | Text near-complete, placement poor | Real NIST chapter: pagination now 34 pages against 34 and exact text 0.8030, but geometry 0.2536 and p95 561 px — the worst-drifting text is still half a page out of position. |
+| ODT | Proven on current corpus | Real UK IPO agreement: **1.0000 exact text**, geometry 0.8006, p95 35.29 px, and pagination matching LibreOffice. |
 | RTF | Implemented; synthetic evidence only | `basic.rtf`: 100% exact text, 8.07 px p95; no real RTF corpus document |
-| PPTX | Reading order fixed; placement partial | Real NASA deck: 11/11 slides, 0.945187 exact text, 0.252692 geometry, and 237.07 px p95. Rich-text lines and visual shape order are preserved; two EMF images are named as undrawn rather than omitted. |
+| PPTX | Text near-complete, placement poor | Real NASA deck: correct slide count and exact text 0.9452, but geometry 0.2527 and p95 237 px on a 720 px slide. |
 | ODP | Implemented; synthetic evidence only | `basic.odp`: 100% exact text, 4.97 px p95; no real ODP corpus document |
 | PNG | Implemented; parser/raster tested | Generated image fixtures |
 | JPEG | Implemented; photographed evidence | Real photographed receipt plus EXIF-orientation fixtures |
