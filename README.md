@@ -68,8 +68,8 @@ and Liberation Sans/Serif/Mono faces plus DejaVu Sans, with their
 OFL/Bitstream licence texts. They substitute Calibri, Cambria, Arial/Helvetica,
 Times New Roman, and Courier New using compatible metrics.
 Browser builds support either `--features fonts` or the core build plus
-`addFont(bytes)`. The measured release WASM sizes are 1,572,420 bytes gzipped
-without fonts (4 MiB budget) and 5,599,315 bytes with fonts (9 MiB budget).
+`addFont(bytes)`. The measured release WASM sizes are 1,578,147 bytes gzipped
+without fonts (4 MiB budget) and 5,605,777 bytes with fonts (9 MiB budget).
 The root npm export works with ESM bundlers; `readany-render/no-bundler` exposes
 the same web initializer explicitly for direct browser imports. Both modes let
 the caller pass a `wasmUrl` to `init`, and the npm tarball includes every

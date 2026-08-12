@@ -45,17 +45,17 @@ The full Endo and generated-wide sheet rasters still correctly fail above the
 
 | Build | Measured gzip size | Budget | Result |
 | --- | ---: | ---: | --- |
-| Core WASM, no bundled fonts | 1,572,420 bytes | 4,194,304 bytes | pass |
-| WASM with bundled fonts | 5,599,315 bytes | 9,437,184 bytes | pass |
+| Core WASM, no bundled fonts | 1,578,147 bytes | 4,194,304 bytes | pass |
+| WASM with bundled fonts | 5,605,777 bytes | 9,437,184 bytes | pass |
 
 ## Performance
 
 | Gate | Measured | Budget | Result |
 | --- | ---: | ---: | --- |
-| Generated 400 x 350 XLSX to display list | 450 ms | 500 ms | pass |
-| Real Endo workbook to display list | 246 ms | 500 ms | pass |
-| Real Endo 1,200 x 800 viewport raster | 43 ms | 100 ms | pass |
-| 100-page DOCX to display list | 4 ms | 3,000 ms | pass |
+| Generated 400 x 350 XLSX to display list | 441 ms | 500 ms | pass |
+| Real Endo workbook to display list | 245 ms | 500 ms | pass |
+| Real Endo 1,200 x 800 viewport raster | 40 ms | 100 ms | pass |
+| 100-page DOCX to display list | 1 ms | 3,000 ms | pass |
 | One small page raster | <1 ms | 100 ms | pass |
 
 The Endo gate is a committed real input. XLSX row-height derivation is one pass,
