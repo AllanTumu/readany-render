@@ -26,7 +26,7 @@ page, and JPEG honours EXIF orientation.
 | PNG / JPEG / GIF / BMP / WebP | Single inspectable image page with pixel ceiling and orientation | Photographed receipt pixel diagnostic is exact |
 
 The page-shaped text-fidelity mean is **0.615785**. The real spreadsheet mean is
-**0.972789**. Exact cell text is **1.000000** for both Endo and OakPrism; sampled
+**0.972789**. Exact cell text is **1.000000** for both the two real workbooks; sampled
 mean / p95 box errors are 0.26 / 0.27 px and 0.45 / 3.27 px. See
 `docs/FIDELITY.md` for the scoring definition and sampling boundary.
 
@@ -47,7 +47,7 @@ pinned from A through ZZZ. Frozen row/column counts now carry their clamped pixe
 width and height, which lets a viewport repaint the body and each frozen axis
 independently.
 
-The full Endo and generated-wide sheet rasters still correctly fail above the
+The full sheet A and generated-wide sheet rasters still correctly fail above the
 100-million-pixel safety ceiling. Their 1,200 x 800 viewports succeed.
 
 ## Size
@@ -62,12 +62,12 @@ The full Endo and generated-wide sheet rasters still correctly fail above the
 | Gate | Measured | Budget | Result |
 | --- | ---: | ---: | --- |
 | Generated 400 x 350 XLSX to display list | 441 ms | 500 ms | pass |
-| Real Endo workbook to display list | 243 ms | 500 ms | pass |
-| Real Endo 1,200 x 800 viewport raster | 39 ms | 100 ms | pass |
+| Real sheet A workbook to display list | 243 ms | 500 ms | pass |
+| Real sheet A 1,200 x 800 viewport raster | 39 ms | 100 ms | pass |
 | 100-page DOCX to display list | 1 ms | 3,000 ms | pass |
 | One small page raster | <1 ms | 100 ms | pass |
 
-The Endo gate is a committed real input. XLSX row-height derivation is one pass,
+The sheet A gate is a committed real input. XLSX row-height derivation is one pass,
 and repeated non-numeric shaping is cached for the duration of a render. The
 performance suite runs serially so scheduler contention is not mistaken for a
 parser regression.
@@ -85,7 +85,7 @@ parser regression.
 4. The sparse synthetic page corpus no longer carries unsupported 0.95/0.90
    absolute SSIM floors. Text-geometry regression is gated against the committed
    baseline with a 0.001 extractor-rounding allowance.
-5. The corpus contains the motivating Endo workbook, a second 1 MiB stress
+5. The corpus contains the motivating sheet A workbook, a second 1 MiB stress
    workbook, a photographed receipt fixture, a 34-page NIST DOCX chapter, an
    11-slide NASA PPTX, a two-page UK IPO ODT agreement, and an official public
    sample statement. The statement is used to verify deliberate PDF delegation

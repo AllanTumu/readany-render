@@ -57,7 +57,7 @@ fn a_real_statement_is_explicitly_delegated_instead_of_looking_rendered() {
 
 #[test]
 fn xlsx_declared_default_row_height_controls_sheet_geometry() {
-    let Some(bytes) = private_corpus("oakprism-stress-v3.xlsx") else {
+    let Some(bytes) = private_corpus("sheet-b.xlsx") else {
         eprintln!(
             "skipped: READANY_RENDER_CORPUS is unset, so the private stress \
              workbook is unavailable"
@@ -67,7 +67,7 @@ fn xlsx_declared_default_row_height_controls_sheet_geometry() {
     let rendered = render(
         &bytes,
         &Options {
-            filename: Some("oakprism-stress-v3.xlsx"),
+            filename: Some("sheet-b.xlsx"),
             ..Options::default()
         },
     )

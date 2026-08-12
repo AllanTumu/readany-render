@@ -134,7 +134,7 @@
       "ratio": 1.0
     }
   },
-  "endo-prem-2023.xlsx": {
+  "sheet-a.xlsx": {
     "pixel": {
       "aligned_ssim": 0.7339929256242701,
       "offset_x": 0.0,
@@ -211,7 +211,7 @@
       "ratio": 1.0
     }
   },
-  "oakprism-stress-v3.xlsx": {
+  "sheet-b.xlsx": {
     "pixel": {
       "aligned_ssim": 0.6771220730753016,
       "offset_x": 0.0,

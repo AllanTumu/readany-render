@@ -62,7 +62,7 @@ still reported rather than promoted as publication readiness.
 
 | Format | Status | Evidence |
 | --- | --- | --- |
-| XLSX | Proven on current corpus | Endo and OakPrism real workbooks: 100% exhaustive exact cell text; sampled geometry p95 0.27 px and 3.27 px |
+| XLSX | Proven on current corpus | two real workbooks: 100% exhaustive exact cell text; sampled geometry p95 0.27 px and 3.27 px |
 | XLSM | Implemented; not real-corpus proven | Generated macro fixture and the XLSX path; macro omission is explicit |
 | ODS | Implemented; not real-corpus proven | Generated ODS fixtures and golden/raster tests only |
 | CSV | Implemented; parser-tested only | Generated quoted-field/newline fixtures only |
@@ -108,7 +108,7 @@ native tools and are the only filesystem users.
 ## Measured performance
 
 On the same machine and date, `./scripts/check-performance.sh` measured the
-generated 400 x 350 sheet at **441 ms**, the real Endo workbook parse at **243
+generated 400 x 350 sheet at **441 ms**, the real sheet A workbook parse at **243
 ms**, its 1,200 x 800 viewport raster at **39 ms**, the generated 100-page DOCX
 at **1 ms**, and a small-page raster below the timer's 1 ms resolution. Budgets
 are 500 ms for sheet parsing, 100 ms for the real viewport, 3,000 ms for the

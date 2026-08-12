@@ -11,7 +11,7 @@
 /fuzz/corpus/
 /fuzz/artifacts/
 
-# The private spreadsheet corpus — personal and health data, never committed.
+# The private spreadsheet corpus — personal and special-category personal data, never committed.
 # See corpus/real/README.md and READANY_RENDER_CORPUS.
-corpus/real/endo-prem-2023.xlsx
-corpus/real/oakprism-stress-v3.xlsx
+corpus/real/sheet-a.xlsx
+corpus/real/sheet-b.xlsx

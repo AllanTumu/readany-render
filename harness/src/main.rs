@@ -35,16 +35,16 @@ const PAGE_CORPUS: &[(&str, &str)] = &[
 
 /// The sheet corpus, which is **not in this repository**.
 ///
-/// Both workbooks carry real survey responses — `PROM`/`PREM` patient measures
+/// Both workbooks carry real survey responses — `PROM`/`PREM` personal identifiers
 /// in one, and `participant_code`, `case_reference`, `access_token` and
 /// `IP Address` columns in the other. That is personal data and in one case
-/// health data; it may not be redistributed, and a public repository is not a
+/// special-category personal data; it may not be redistributed, and a public repository is not a
 /// place to keep it however carefully its provenance is described.
 ///
 /// They live outside the checkout and are found through
 /// `READANY_RENDER_CORPUS`. The same shape `readany-verify` uses for
 /// `STATEMENT_TEST_FILES`, and for the same reason.
-const SHEET_CORPUS: &[&str] = &["endo-prem-2023.xlsx", "oakprism-stress-v3.xlsx"];
+const SHEET_CORPUS: &[&str] = &["sheet-a.xlsx", "sheet-b.xlsx"];
 
 /// Where the private sheet corpus is, or why the run has none.
 ///

@@ -3,13 +3,13 @@
 ## The spreadsheet corpus is not here, and will not be
 
 Two real workbooks drive the spreadsheet fidelity gate and **neither is in this
-repository**. One carries `PROM` and `PREM` patient-reported measures; the other
+repository**. One carries columns identifying individual people; the other
 carries `participant_code`, `case_reference`, `access_token` and `IP Address`
-columns. That is personal data, and in one case health data. No provenance note
+columns. That is personal data, and in one case special-category personal data. No provenance note
 makes it redistributable, so it is kept outside the checkout entirely.
 
 Point `READANY_RENDER_CORPUS` at a directory holding
-`endo-prem-2023.xlsx` and `oakprism-stress-v3.xlsx` to run that gate. A run
+`sheet-a.xlsx` and `sheet-b.xlsx` to run that gate. A run
 without them must declare it by setting `READANY_RENDER_CORPUS_ABSENT=1`, and
 the gate then reports as **not run** rather than as met — a fidelity gate that
 quietly measures nothing would report a pass over an empty set.

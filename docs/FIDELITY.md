@@ -10,7 +10,7 @@ harness measures five distributed 1,200 x 800 sheet viewports at 96 and 192 dpi.
 The release gate is based on semantic text and geometry, not blank raster area.
 For spreadsheets, exact text is exhaustive: every non-empty cell in each full
 sheet is compared by `SourceRef::Cell`. Geometry is sampled at the four sheet
-corners and centre. This covers about 1.08% of Endo and 2.05% of OakPrism, and
+corners and centre. This covers about 1.08% of sheet A and 2.05% of sheet B, and
 the report states that boundary rather than presenting it as full-sheet layout
 coverage. Page display-list `GlyphRun`s are split into positioned words and
 matched against PDF bounding-box text.
@@ -37,10 +37,10 @@ Measured 13 August 2026:
 | `basic.odt` | 1.000000 | 0.607502 | 0.607502 | 6.90 / 12.35 px |
 | `basic.pptx` | 1.000000 | 0.682948 | 0.682948 | 4.61 / 5.48 px |
 | `basic.rtf` | 1.000000 | 0.717480 | 0.717480 | 4.30 / 8.07 px |
-| `endo-prem-2023.xlsx` | 1.000000 | 0.978372 | 0.978372 | 0.26 / 0.27 px |
+| `sheet-a.xlsx` | 1.000000 | 0.978372 | 0.978372 | 0.26 / 0.27 px |
 | `nasa-agency-report-2022.pptx` | 0.945187 | 0.252692 | 0.238842 | 70.09 / 237.07 px |
 | `nist-hb133-2026-chapter-2.docx` | 0.802986 | 0.253570 | 0.203613 | 117.97 / 561.48 px |
-| `oakprism-stress-v3.xlsx` | 1.000000 | 0.967207 | 0.967207 | 0.45 / 3.27 px |
+| `sheet-b.xlsx` | 1.000000 | 0.967207 | 0.967207 | 0.45 / 3.27 px |
 | `uk-ipo-one-way-nda.odt` | 1.000000 | 0.800640 | 0.800640 | 13.16 / 35.29 px |
 
 The page-document text-fidelity mean is **0.615785** and the real-sheet mean is
@@ -143,10 +143,10 @@ images. A dimension difference above 2% is a hard failure before comparison.
 | `basic.odt` | 0.993403 | 0.1425% / 0.1992% |
 | `basic.pptx` | 0.997029 | 0.1138% / 0.1360% |
 | `basic.rtf` | 0.995884 | 0.1133% / 0.1370% |
-| `endo-prem-2023.xlsx` | 0.733993 | 14.8375% / 6.7182% |
+| `sheet-a.xlsx` | 0.733993 | 14.8375% / 6.7182% |
 | `nasa-agency-report-2022.pptx` | 0.754455 | 44.3381% / 78.3646% |
 | `nist-hb133-2026-chapter-2.docx` | 0.679422 | 6.5714% / 7.0554% |
-| `oakprism-stress-v3.xlsx` | 0.677122 | 21.6146% / 13.9774% |
+| `sheet-b.xlsx` | 0.677122 | 21.6146% / 13.9774% |
 | `receipt.jpg` | 1.000000 | 95.6258% / 95.6258% |
 | `uk-ipo-one-way-nda.odt` | 0.934531 | 6.3837% / 6.7372% |
 
@@ -158,8 +158,8 @@ are pixel diagnostics only: their low ink density cannot prove layout fidelity.
 ### Gridline before/after diagnostic
 
 The missing-gridline hypothesis was measured rather than assumed. Before sheet
-gridlines were implemented, our/reference ink was 5.9187%/6.7182% on Endo and
-12.0678%/13.9774% on OakPrism: relative gaps of 11.9% and 13.7%. With the
+gridlines were implemented, our/reference ink was 5.9187%/6.7182% on sheet A and
+12.0678%/13.9774% on sheet B: relative gaps of 11.9% and 13.7%. With the
 workbook's default-on gridlines painted, the same figures became
 14.8375%/6.7182% and 21.6146%/13.9774%. That deliberately recorded result shows
 the reference HTML export does not preserve Calc's interactive grid furniture;
