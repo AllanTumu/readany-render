@@ -840,3 +840,93 @@ fn a_page_break_before_the_first_block_does_not_open_a_blank_page() {
         "the first page must carry content, not be the blank one the break asked for"
     );
 }
+
+/// An omitted OOXML spacing value means zero, not the flow renderer's generic
+/// visual gap.  The NIST contents has 33 compact entries; adding 6.6 px after
+/// every one consumed about 218 px and moved the last four entries to a second
+/// page even though LibreOffice keeps the complete contents on page one.
+///
+/// **Falsified** by constructing the DOCX paragraph style from the unmodified
+/// `ParagraphStyle::default()`: paragraph 32 moves back to page two.
+#[test]
+fn unspecified_docx_paragraph_spacing_does_not_split_the_contents_page() {
+    let rendered = render(
+        &real_corpus("nist-hb133-2026-chapter-2.docx"),
+        &Options {
+            filename: Some("nist-hb133-2026-chapter-2.docx"),
+            ..Options::default()
+        },
+    )
+    .expect("the NIST chapter renders");
+    let first = rendered.pages.first().expect("the contents page exists");
+    assert!(
+        first.items.iter().any(|item| {
+            matches!(
+                item,
+                Item::Glyphs(run)
+                    if matches!(
+                        run.source,
+                        Some(readany_render::SourceRef::Text { paragraph: 32, .. })
+                    )
+            )
+        }),
+        "the final contents entry remains on LibreOffice's first page"
+    );
+}
+
+/// An even/odd header pair describes alternatives, not two layers to paint on
+/// every page.  The NIST chapter has one of each; painting both duplicated 105
+/// characters per page and put header words hundreds of pixels from their
+/// reference positions.
+///
+/// **Falsified** by returning to an archive-wide header scan: the title occurs
+/// twice above the first page's body instead of once.
+#[test]
+fn docx_even_and_odd_headers_are_alternatives() {
+    let rendered = render(
+        &real_corpus("nist-hb133-2026-chapter-2.docx"),
+        &Options {
+            filename: Some("nist-hb133-2026-chapter-2.docx"),
+            ..Options::default()
+        },
+    )
+    .expect("the NIST chapter renders");
+    let first = rendered.pages.first().expect("the contents page exists");
+    let titles = first
+        .items
+        .iter()
+        .filter(|item| {
+            matches!(
+                item,
+                Item::Glyphs(run)
+                    if run.origin.y < 80.0
+                        && run.text.starts_with("Chapter 2.  Test Procedures")
+            )
+        })
+        .count();
+    assert_eq!(titles, 1, "only the odd-page header is painted on page one");
+}
+
+/// Word suppresses paragraph space-before at a page boundary and advances an
+/// ordinary 11 pt line by 12.65 pt in the measured NIST reference.  Applying
+/// the generic 13.2 pt line box consumed one body page, while applying a 649.6
+/// px space-before to the final blank page consumed another.
+///
+/// **Falsified** by restoring the generic 1.2 line multiplier or adding
+/// `paragraph.style.before` unconditionally: the page count rises above 34.
+#[test]
+fn docx_line_pitch_and_top_spacing_match_the_reference_pagination() {
+    let rendered = render(
+        &real_corpus("nist-hb133-2026-chapter-2.docx"),
+        &Options {
+            filename: Some("nist-hb133-2026-chapter-2.docx"),
+            ..Options::default()
+        },
+    )
+    .expect("the NIST chapter renders");
+    assert_eq!(
+        rendered.pages.len(),
+        34,
+        "LibreOffice paginates the NIST chapter as 34 pages"
+    );
+}

@@ -221,7 +221,19 @@ impl StyleSheet {
         }
         let mut text = default_text_style();
         run.apply_to(&mut text);
-        let mut paragraph_style = ParagraphStyle::default();
+        // Word's omitted paragraph spacing is zero.  The flow layout's generic
+        // default carries a small visual gap for formats such as RTF, but
+        // applying that gap to OOXML added 6.6 px after every unstyled TOC
+        // entry.  The 33-entry NIST contents then needed two pages where Word
+        // and LibreOffice use one, shifting the remaining 33 reference pages.
+        let mut paragraph_style = ParagraphStyle {
+            after: 0.0,
+            // LibreOffice's NIST reference advances ordinary 11 pt Word lines
+            // by 12.65 pt (16.87 px), not the generic flow default's 13.2 pt.
+            // Across the chapter the old 1.2 multiplier consumed one page.
+            line_height_multiplier: 1.15,
+            ..ParagraphStyle::default()
+        };
         paragraph.apply_to(&mut paragraph_style);
         ResolvedStyle {
             text,

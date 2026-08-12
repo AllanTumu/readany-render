@@ -6,7 +6,7 @@ use crate::flow::{FlowParagraph, FlowRun, layout_flow};
 use crate::model::{ImageData, ImageItem, Item, Rect, Size, SourceRef, Unrendered};
 use crate::{Format, Options, RenderError};
 use quick_xml::events::{BytesStart, Event};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) fn render(bytes: &[u8], options: &Options<'_>) -> Result<crate::Rendered, RenderError> {
     let archive = Archive::open(bytes, &options.limits)?;
@@ -39,6 +39,8 @@ pub(crate) fn render(bytes: &[u8], options: &Options<'_>) -> Result<crate::Rende
     paint_tables(&parsed.tables, parsed.margins, &mut rendered);
     paint_repeating_parts(
         &archive,
+        document,
+        &relationships.targets,
         &styles,
         &numbering,
         &mut rendered,
@@ -71,20 +73,17 @@ pub(crate) fn render(bytes: &[u8], options: &Options<'_>) -> Result<crate::Rende
 
 fn paint_repeating_parts(
     archive: &Archive,
+    document: &[u8],
+    relationships: &BTreeMap<String, String>,
     styles: &StyleSheet,
     numbering: &Numbering,
     rendered: &mut crate::Rendered,
     margins: Margins,
     options: &Options<'_>,
 ) -> Result<(), RenderError> {
-    let names = archive
-        .names()
-        .filter(|name| {
-            (name.starts_with("word/header") || name.starts_with("word/footer"))
-                && name.ends_with(".xml")
-        })
-        .map(str::to_owned)
-        .collect::<Vec<_>>();
+    let parts = parse_repeating_parts(document, relationships)?;
+    let names = parts.targets().map(str::to_owned).collect::<BTreeSet<_>>();
+    let mut laid_out = BTreeMap::<String, Vec<Item>>::new();
     for name in names {
         let Some(bytes) = archive.get(&name) else {
             continue;
@@ -107,20 +106,107 @@ fn paint_repeating_parts(
                 16.0,
             )
         };
-        let laid_out = layout_flow(
+        let part = layout_flow(
             &parsed.paragraphs,
             Format::Docx,
             options,
             rendered.pages[0].size,
             part_margins,
         )?;
-        if let Some(part_page) = laid_out.pages.first() {
-            for page in &mut rendered.pages {
-                page.items.extend(part_page.items.clone());
+        if let Some(part_page) = part.pages.first() {
+            laid_out.insert(name, part_page.items.clone());
+        }
+    }
+    for (page_index, page) in rendered.pages.iter_mut().enumerate() {
+        let even = (page_index + 1) % 2 == 0;
+        for target in [parts.header(even), parts.footer(even)]
+            .into_iter()
+            .flatten()
+        {
+            if let Some(items) = laid_out.get(target) {
+                page.items.extend(items.clone());
             }
         }
     }
     Ok(())
+}
+
+#[derive(Default)]
+struct RepeatingParts {
+    odd_header: Option<String>,
+    even_header: Option<String>,
+    odd_footer: Option<String>,
+    even_footer: Option<String>,
+}
+
+impl RepeatingParts {
+    fn header(&self, even: bool) -> Option<&str> {
+        if even {
+            self.even_header.as_deref().or(self.odd_header.as_deref())
+        } else {
+            self.odd_header.as_deref()
+        }
+    }
+
+    fn footer(&self, even: bool) -> Option<&str> {
+        if even {
+            self.even_footer.as_deref().or(self.odd_footer.as_deref())
+        } else {
+            self.odd_footer.as_deref()
+        }
+    }
+
+    fn targets(&self) -> impl Iterator<Item = &str> {
+        [
+            self.odd_header.as_deref(),
+            self.even_header.as_deref(),
+            self.odd_footer.as_deref(),
+            self.even_footer.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+    }
+}
+
+fn parse_repeating_parts(
+    document: &[u8],
+    relationships: &BTreeMap<String, String>,
+) -> Result<RepeatingParts, RenderError> {
+    let mut reader = quick_xml::Reader::from_reader(document);
+    let mut parts = RepeatingParts::default();
+    loop {
+        match reader.read_event() {
+            Ok(Event::Empty(start)) | Ok(Event::Start(start)) => {
+                let qualified_name = start.name();
+                let name = xml::local_name(qualified_name.as_ref());
+                if name != b"headerReference" && name != b"footerReference" {
+                    continue;
+                }
+                let Some(target) = attr_exact(&start, b"r:id")
+                    .and_then(|id| relationships.get(&id))
+                    .cloned()
+                else {
+                    continue;
+                };
+                let even = attr(&start, b"type").as_deref() == Some("even");
+                if name == b"headerReference" {
+                    if even {
+                        parts.even_header = Some(target);
+                    } else {
+                        parts.odd_header = Some(target);
+                    }
+                } else if even {
+                    parts.even_footer = Some(target);
+                } else {
+                    parts.odd_footer = Some(target);
+                }
+            }
+            Ok(Event::Eof) => break,
+            Ok(_) => {}
+            Err(_) => return Err(RenderError::malformed("section references are malformed")),
+        }
+    }
+    Ok(parts)
 }
 
 fn paint_images(

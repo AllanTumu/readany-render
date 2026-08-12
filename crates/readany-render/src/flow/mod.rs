@@ -26,6 +26,7 @@ pub(crate) struct ParagraphStyle {
     pub after: f32,
     pub line_height: Option<f32>,
     pub line_height_at_least: bool,
+    pub line_height_multiplier: f32,
     pub keep_next: bool,
     pub keep_lines: bool,
     pub widow_control: bool,
@@ -44,6 +45,7 @@ impl Default for ParagraphStyle {
             after: 6.6,
             line_height: None,
             line_height_at_least: false,
+            line_height_multiplier: 1.2,
             keep_next: false,
             keep_lines: false,
             widow_control: true,
@@ -128,7 +130,12 @@ pub(crate) fn layout_flow(
             push_page(&mut pages, page_size, options)?;
             y = margins.1;
         }
-        y += paragraph.style.before;
+        // Paragraph space-before is suppressed at the top of a page.  Applying
+        // it where there is no preceding block made the NIST document's final
+        // 649.6 px spacer overflow onto a second otherwise blank page.
+        if y > margins.1 {
+            y += paragraph.style.before;
+        }
         let fitting_lines = line_metrics
             .iter()
             .scan(y, |cursor, height| {
@@ -232,9 +239,9 @@ fn push_page(pages: &mut Vec<Page>, size: Size, options: &Options<'_>) -> Result
 
 fn line_height(paragraph: &FlowParagraph, range: std::ops::Range<usize>) -> f32 {
     let natural = styled_segments(paragraph, range)
-        .map(|(_, _, style)| style.size_px.max(1.0) * 1.2)
+        .map(|(_, _, style)| style.size_px.max(1.0) * paragraph.style.line_height_multiplier)
         .fold(0.0_f32, f32::max)
-        .max(17.6);
+        .max(14.666_667 * paragraph.style.line_height_multiplier);
     match paragraph.style.line_height {
         Some(value) if paragraph.style.line_height_at_least => natural.max(value),
         Some(value) => value.max(1.0),
