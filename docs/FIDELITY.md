@@ -63,14 +63,20 @@ ignored — against the same LibreOffice reference:
 
 | Corpus document | Page-aligned `exact` | Characters ours / reference | Document-wide similarity |
 | --- | ---: | ---: | ---: |
-| `uk-ipo-one-way-nda.odt` | 0.148148 | 3,171 / 3,171 | **1.000000** |
+| `uk-ipo-one-way-nda.odt` | 0.148148 → **0.9634** (fixed) | 3,171 / 3,171 | **1.000000** |
 | `nist-hb133-2026-chapter-2.docx` | 0.365007 | 65,997 / 65,843 | **0.897400** |
 | `nasa-agency-report-2022.pptx` | 0.778898 | 4,034 / 4,037 | 0.679200 |
 
 Three different facts, and the single number hid all three:
 
-* **ODT is character-identical.** Every character, in order. Its defect is
-  pagination alone: three pages where LibreOffice makes two.
+* **ODT is character-identical.** Every character, in order. Its defect was
+  pagination alone — three pages where LibreOffice makes two — and it is now
+  **fixed**. The agreement carries `fo:break-before="page"` on its very first
+  paragraph; honoured literally that opens the document with a blank page and
+  shifts every page after it. Word and LibreOffice both suppress a break before
+  the first block. Page-aligned fidelity went from **0.1481 to 0.9634** on that
+  one condition, which is the clearest possible demonstration that the score was
+  measuring placement rather than reading.
 * **DOCX reads within 0.2% of the reference character count** and agrees on
   ~90% of the sequence. Its defect is pagination — 37 pages against 34, with
   content distributed differently from the first page onward, where ours holds

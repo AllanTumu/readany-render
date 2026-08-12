@@ -69,7 +69,7 @@ below states which is which.
 | CSV | Implemented; parser-tested only | Generated quoted-field/newline fixtures only |
 | TSV | Implemented; parser-tested only | Generated delimiter fixtures only |
 | DOCX | Text complete, pagination not faithful | Real NIST chapter: character count within **0.2%** of reference and 89.7% document-wide sequence agreement, so the text is read. It paginates as 37 pages against 34, and the page-aligned score is 36.5% because of it. |
-| ODT | Text **character-identical**, pagination not faithful | Real UK IPO agreement: 3,171 characters against 3,171, similarity **1.0000**. It paginates as three pages against two, and the page-aligned score is 14.8% entirely because of that. |
+| ODT | Proven on current corpus | Real UK IPO agreement: 3,171 characters against 3,171, similarity **1.0000**, and page-aligned fidelity **0.963** now that a `break-before` on the first paragraph no longer opens a blank page. |
 | RTF | Implemented; synthetic evidence only | `basic.rtf`: 100% exact text, 8.07 px p95; no real RTF corpus document |
 | PPTX | Text complete, shape order not faithful | Real NASA deck: correct slide count and character count within **0.07%**, but 67.9% sequence agreement — the same text in a different order within a slide. Two EMF images are named as undrawn rather than omitted. |
 | ODP | Implemented; synthetic evidence only | `basic.odp`: 100% exact text, 4.97 px p95; no real ODP corpus document |

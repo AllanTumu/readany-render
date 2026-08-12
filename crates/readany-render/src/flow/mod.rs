@@ -105,8 +105,21 @@ pub(crate) fn layout_flow(
             .collect::<Vec<_>>();
         let paragraph_height =
             paragraph.style.before + line_metrics.iter().sum::<f32>() + paragraph.style.after;
-        if pending_page_break
-            || paragraph.style.page_break_before
+        // **A break before nothing is not a break.** A `break-before` on the
+        // very first block asks for a page boundary where one already exists,
+        // and honouring it literally opens the document with a blank page.
+        // Word and LibreOffice both suppress it, so a document carrying
+        // `fo:break-before="page"` or `w:pageBreakBefore` on its first
+        // paragraph — the UK IPO agreement does — paginated as three pages
+        // against LibreOffice's two, and every page-aligned score after the
+        // first page was then comparing unrelated content.
+        //
+        // The test is "is anything on this page yet", not "is this paragraph
+        // index zero": a leading empty paragraph must not re-enable the break
+        // either, and `y > margins.1` is already how the keep rules below ask
+        // the same question.
+        let page_is_empty = pages.len() == 1 && y <= margins.1;
+        if (!page_is_empty && (pending_page_break || paragraph.style.page_break_before))
             || ((paragraph.style.keep_lines || paragraph.style.keep_next)
                 && y > margins.1
                 && y + paragraph_height > content_bottom

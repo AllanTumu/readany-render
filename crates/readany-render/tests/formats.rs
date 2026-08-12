@@ -807,3 +807,36 @@ fn a_retained_document_without_overrides_is_the_exact_committed_golden() {
         .unwrap_or_else(|error| panic!("the retained display list serialises: {error}"));
     assert_eq!(actual, include_str!("goldens/basic-xlsx.json"));
 }
+
+/// **A break before nothing is not a break.**
+///
+/// The UK IPO agreement carries `fo:break-before="page"` on its very first
+/// paragraph. Honoured literally it opens the document with a blank page, and
+/// the whole document then sits one page later than LibreOffice puts it — which
+/// took its page-aligned fidelity score to **0.148** while the text was
+/// character-identical to the reference. Word and LibreOffice both suppress a
+/// break before the first block; so does this.
+///
+/// **Falsified** by dropping the `page_is_empty` guard in `flow::layout`: the
+/// count becomes three and this goes red.
+#[test]
+fn a_page_break_before_the_first_block_does_not_open_a_blank_page() {
+    let rendered = render(
+        &real_corpus("uk-ipo-one-way-nda.odt"),
+        &Options {
+            filename: Some("uk-ipo-one-way-nda.odt"),
+            ..Options::default()
+        },
+    )
+    .expect("the agreement renders");
+    assert_eq!(
+        rendered.pages.len(),
+        2,
+        "LibreOffice paginates this agreement as two pages"
+    );
+    let first = rendered.pages.first().expect("a first page");
+    assert!(
+        !first.items.is_empty(),
+        "the first page must carry content, not be the blank one the break asked for"
+    );
+}
