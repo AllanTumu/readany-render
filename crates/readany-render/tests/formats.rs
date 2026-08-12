@@ -996,3 +996,45 @@ fn odt_empty_paragraphs_preserve_vertical_space() {
         "the empty paragraph contributes its line box"
     );
 }
+
+/// DrawingML paragraphs and rich-text runs keep their own line boxes.  The
+/// NASA cover has five author/date paragraphs in one shape; flattening them
+/// put October beside Andrew near the top instead of at its 504 px baseline.
+/// Its slide-number placeholder also changes index between master and layout,
+/// so geometry inheritance must fall back to the placeholder type.
+///
+/// **Falsified** by restoring the single-line shape painter, changing the body
+/// line factor back to 0.9, or matching placeholder geometry only by index:
+/// October rises above 495 px or slide 7's number returns to x=52 px.
+#[test]
+fn pptx_preserves_rich_text_lines_and_type_inherited_placeholder_geometry() {
+    let rendered = render(
+        &real_corpus("nasa-agency-report-2022.pptx"),
+        &Options {
+            filename: Some("nasa-agency-report-2022.pptx"),
+            ..Options::default()
+        },
+    )
+    .expect("the NASA presentation renders");
+    let glyph = |page: usize, prefix: &str| {
+        rendered.pages[page]
+            .items
+            .iter()
+            .filter_map(|item| {
+                let Item::Group(group) = item else {
+                    return None;
+                };
+                group.items.iter().find_map(|item| {
+                    let Item::Glyphs(run) = item else {
+                        return None;
+                    };
+                    run.text.starts_with(prefix).then_some(run)
+                })
+            })
+            .next()
+            .unwrap_or_else(|| panic!("{prefix:?} is present on page {}", page + 1))
+    };
+    assert!(glyph(0, "October").origin.y > 495.0);
+    assert!(glyph(6, "7").origin.x > 1_170.0);
+    assert!(glyph(6, "7").origin.y > 680.0);
+}

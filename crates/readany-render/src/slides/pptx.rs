@@ -4,6 +4,74 @@ use crate::text::{TextStyle, shape};
 use crate::{Format, Options, RenderError};
 use quick_xml::events::Event;
 use std::collections::BTreeMap;
+
+#[derive(Clone, Default)]
+struct Placeholder {
+    index: Option<String>,
+    kind: String,
+}
+
+impl Placeholder {
+    fn keys(&self) -> impl Iterator<Item = String> + '_ {
+        self.index
+            .iter()
+            .map(|value| format!("idx:{value}"))
+            .chain(std::iter::once(format!("type:{}", self.kind)))
+    }
+}
+
+#[derive(Clone, Copy, Default)]
+enum TextAlignment {
+    #[default]
+    Left,
+    Centre,
+    Right,
+}
+
+#[derive(Clone, Copy, Default)]
+enum VerticalAnchor {
+    #[default]
+    Top,
+    Centre,
+    Bottom,
+}
+
+#[derive(Clone)]
+struct SlideRun {
+    text: String,
+    style: TextStyle,
+}
+
+#[derive(Default)]
+struct SlideParagraph {
+    runs: Vec<SlideRun>,
+    alignment: TextAlignment,
+}
+
+struct TextBody {
+    paragraphs: Vec<SlideParagraph>,
+    left_inset: f32,
+    top_inset: f32,
+    right_inset: f32,
+    bottom_inset: f32,
+    anchor: VerticalAnchor,
+}
+
+impl Default for TextBody {
+    fn default() -> Self {
+        Self {
+            paragraphs: Vec::new(),
+            // ECMA-376 DrawingML text body defaults: 0.1 in horizontally and
+            // 0.05 in vertically.  Treating every inset as 4 px shifted the
+            // NASA title 5.6 px left of the LibreOffice reference.
+            left_inset: 9.6,
+            top_inset: 4.8,
+            right_inset: 9.6,
+            bottom_inset: 4.8,
+            anchor: VerticalAnchor::Top,
+        }
+    }
+}
 pub(crate) fn render(bytes: &[u8], options: &Options<'_>) -> Result<Rendered, RenderError> {
     let archive = Archive::open(bytes, &options.limits)?;
     let presentation = archive.required("ppt/presentation.xml")?;
@@ -211,15 +279,16 @@ fn parse_slide(
         size_px: 24.0,
         ..TextStyle::default()
     };
-    let mut style = default_style.clone();
     let mut items = Vec::new();
     let mut unsupported_media = BTreeMap::<String, u32>::new();
     let mut shape_index = 0_u32;
-    let mut text = String::new();
+    let mut text_body = TextBody::default();
+    let mut paragraph = None::<SlideParagraph>;
+    let mut run = None::<SlideRun>;
     let mut in_t = false;
     let mut in_run_properties = false;
     let mut in_shape_properties = false;
-    let mut placeholder = None::<String>;
+    let mut placeholder = None::<Placeholder>;
     let mut explicit_geometry = false;
     let mut fill = None::<Colour>;
     let mut geometry = String::new();
@@ -234,8 +303,9 @@ fn parse_slide(
                     b"sp" | b"cxnSp" | b"graphicFrame" | b"pic"
                 ) =>
             {
-                text.clear();
-                style = default_style.clone();
+                text_body = TextBody::default();
+                paragraph = None;
+                run = None;
                 shape_index = shape_index.saturating_add(1);
                 placeholder = None;
                 explicit_geometry = false;
@@ -251,15 +321,16 @@ fn parse_slide(
             Ok(Event::End(s)) if xml::local_name(s.name().as_ref()) == b"spPr" => {
                 in_shape_properties = false
             }
-            Ok(Event::Empty(s)) | Ok(Event::Start(s))
+            Ok(Event::Start(s))
                 if matches!(xml::local_name(s.name().as_ref()), b"rPr" | b"defRPr") =>
             {
                 in_run_properties = true;
-                if let Some(size) = attr(&s, b"sz").and_then(|value| value.parse::<f32>().ok()) {
-                    style.size_px = size / 100.0 * 96.0 / 72.0;
-                }
-                style.bold = attr(&s, b"b").is_some_and(|value| value == "1");
-                style.italic = attr(&s, b"i").is_some_and(|value| value == "1");
+                apply_run_properties(&s, &mut run, &default_style);
+            }
+            Ok(Event::Empty(s))
+                if matches!(xml::local_name(s.name().as_ref()), b"rPr" | b"defRPr") =>
+            {
+                apply_run_properties(&s, &mut run, &default_style);
             }
             Ok(Event::End(s))
                 if matches!(xml::local_name(s.name().as_ref()), b"rPr" | b"defRPr") =>
@@ -270,7 +341,9 @@ fn parse_slide(
                 if xml::local_name(s.name().as_ref()) == b"latin" =>
             {
                 if let Some(family) = attr(&s, b"typeface").filter(|value| !value.is_empty()) {
-                    style.family = family;
+                    if let Some(run) = run.as_mut() {
+                        run.style.family = family;
+                    }
                 }
             }
             Ok(Event::Empty(s)) | Ok(Event::Start(s))
@@ -279,8 +352,8 @@ fn parse_slide(
                 if let Some(colour) = attr(&s, b"val").and_then(|value| rgb(&value)) {
                     if in_shape_properties && !in_run_properties {
                         fill = Some(colour);
-                    } else {
-                        style.colour = Some(colour);
+                    } else if let Some(run) = run.as_mut() {
+                        run.style.colour = Some(colour);
                     }
                 }
             }
@@ -297,7 +370,7 @@ fn parse_slide(
             Ok(Event::Empty(s)) | Ok(Event::Start(s))
                 if xml::local_name(s.name().as_ref()) == b"ph" =>
             {
-                placeholder = placeholder_key(&s);
+                placeholder = Some(parse_placeholder(&s));
             }
             Ok(Event::Empty(s)) | Ok(Event::Start(s))
                 if xml::local_name(s.name().as_ref()) == b"prstGeom" =>
@@ -309,18 +382,72 @@ fn parse_slide(
             {
                 image_relationship = attr_exact(&s, b"r:embed");
             }
+            Ok(Event::Empty(s)) | Ok(Event::Start(s))
+                if xml::local_name(s.name().as_ref()) == b"bodyPr" =>
+            {
+                text_body.left_inset = emu(&s, b"lIns", text_body.left_inset);
+                text_body.top_inset = emu(&s, b"tIns", text_body.top_inset);
+                text_body.right_inset = emu(&s, b"rIns", text_body.right_inset);
+                text_body.bottom_inset = emu(&s, b"bIns", text_body.bottom_inset);
+                text_body.anchor = match attr(&s, b"anchor").as_deref() {
+                    Some("ctr") => VerticalAnchor::Centre,
+                    Some("b") => VerticalAnchor::Bottom,
+                    Some("t") | Some("just") | Some("dist") | None => VerticalAnchor::Top,
+                    Some(_) => VerticalAnchor::Top,
+                };
+            }
+            Ok(Event::Start(s)) if xml::local_name(s.name().as_ref()) == b"p" => {
+                finish_slide_paragraph(&mut text_body, &mut paragraph, &mut run);
+                paragraph = Some(SlideParagraph::default());
+            }
+            Ok(Event::Empty(s)) if xml::local_name(s.name().as_ref()) == b"p" => {
+                finish_slide_paragraph(&mut text_body, &mut paragraph, &mut run);
+                text_body.paragraphs.push(SlideParagraph::default());
+            }
+            Ok(Event::Empty(s)) | Ok(Event::Start(s))
+                if xml::local_name(s.name().as_ref()) == b"pPr" =>
+            {
+                if let Some(paragraph) = paragraph.as_mut() {
+                    paragraph.alignment = match attr(&s, b"algn").as_deref() {
+                        Some("ctr") => TextAlignment::Centre,
+                        Some("r") => TextAlignment::Right,
+                        Some("l") | Some("just") | Some("dist") | None => TextAlignment::Left,
+                        Some(_) => TextAlignment::Left,
+                    };
+                }
+            }
+            Ok(Event::Start(s)) if matches!(xml::local_name(s.name().as_ref()), b"r" | b"fld") => {
+                finish_slide_run(&mut paragraph, &mut run);
+                run = Some(SlideRun {
+                    text: String::new(),
+                    style: default_style.clone(),
+                });
+            }
             Ok(Event::Start(s)) if xml::local_name(s.name().as_ref()) == b"t" => in_t = true,
             Ok(Event::End(s)) if xml::local_name(s.name().as_ref()) == b"t" => in_t = false,
             Ok(Event::Text(t)) if in_t => {
-                if !text.is_empty() {
-                    text.push(' ');
-                }
-                text.push_str(&t.decode().map_err(|_| {
+                run.get_or_insert_with(|| SlideRun {
+                    text: String::new(),
+                    style: default_style.clone(),
+                })
+                .text
+                .push_str(&t.decode().map_err(|_| {
                     RenderError::malformed("slide text is malformed; obtain a fresh copy")
                 })?);
             }
             Ok(Event::GeneralRef(reference)) if in_t => {
-                text.push_str(&xml::decode_reference(&reference)?);
+                run.get_or_insert_with(|| SlideRun {
+                    text: String::new(),
+                    style: default_style.clone(),
+                })
+                .text
+                .push_str(&xml::decode_reference(&reference)?);
+            }
+            Ok(Event::End(s)) if matches!(xml::local_name(s.name().as_ref()), b"r" | b"fld") => {
+                finish_slide_run(&mut paragraph, &mut run);
+            }
+            Ok(Event::End(s)) if xml::local_name(s.name().as_ref()) == b"p" => {
+                finish_slide_paragraph(&mut text_body, &mut paragraph, &mut run);
             }
             Ok(Event::End(s))
                 if matches!(
@@ -328,8 +455,11 @@ fn parse_slide(
                     b"sp" | b"cxnSp" | b"graphicFrame" | b"pic"
                 ) =>
             {
+                finish_slide_paragraph(&mut text_body, &mut paragraph, &mut run);
                 if !explicit_geometry {
-                    if let Some(rect) = placeholder.as_ref().and_then(|key| placeholders.get(key)) {
+                    if let Some(rect) = placeholder.as_ref().and_then(|placeholder| {
+                        placeholder.keys().find_map(|key| placeholders.get(&key))
+                    }) {
                         (x, y, width, height) = (rect.x, rect.y, rect.width, rect.height);
                     }
                 }
@@ -417,22 +547,12 @@ fn parse_slide(
                         source: Some(source.clone()),
                     }));
                 }
-                if !text.is_empty() {
-                    let available = (width - 8.0).max(1.0);
-                    if measure_text(&text, &style) > available {
-                        let ratio = available / measure_text(&text, &style).max(1.0);
-                        style.size_px = (style.size_px * ratio).max(8.0);
-                    }
-                    shape_items.push(Item::Glyphs(shape(
-                        &text,
-                        &style,
-                        Point {
-                            x: x + 4.0,
-                            y: y + style.size_px,
-                        },
-                        Some(source.clone()),
-                    )));
-                }
+                shape_items.extend(layout_slide_text(
+                    &text_body,
+                    rect,
+                    placeholder.as_ref(),
+                    &source,
+                ));
                 items.push(Item::Group(Group {
                     clip: Some(Rect {
                         x,
@@ -483,11 +603,217 @@ fn unsupported_media_kind(target: &str) -> Option<String> {
     }
 }
 
+fn apply_run_properties(
+    start: &quick_xml::events::BytesStart<'_>,
+    run: &mut Option<SlideRun>,
+    default_style: &TextStyle,
+) {
+    let style = &mut run
+        .get_or_insert_with(|| SlideRun {
+            text: String::new(),
+            style: default_style.clone(),
+        })
+        .style;
+    if let Some(size) = attr(start, b"sz").and_then(|value| value.parse::<f32>().ok()) {
+        style.size_px = size / 100.0 * 96.0 / 72.0;
+    }
+    style.bold = attr(start, b"b").is_some_and(|value| value == "1");
+    style.italic = attr(start, b"i").is_some_and(|value| value == "1");
+}
+
+fn finish_slide_run(paragraph: &mut Option<SlideParagraph>, run: &mut Option<SlideRun>) {
+    let Some(run) = run.take() else { return };
+    if run.text.is_empty() {
+        return;
+    }
+    paragraph
+        .get_or_insert_with(SlideParagraph::default)
+        .runs
+        .push(run);
+}
+
+fn finish_slide_paragraph(
+    body: &mut TextBody,
+    paragraph: &mut Option<SlideParagraph>,
+    run: &mut Option<SlideRun>,
+) {
+    finish_slide_run(paragraph, run);
+    if let Some(paragraph) = paragraph.take() {
+        body.paragraphs.push(paragraph);
+    }
+}
+
+#[derive(Default)]
+struct SlideLine {
+    runs: Vec<SlideRun>,
+    width: f32,
+    height: f32,
+    alignment: TextAlignment,
+}
+
+fn layout_slide_text(
+    body: &TextBody,
+    rect: Rect,
+    placeholder: Option<&Placeholder>,
+    source: &SourceRef,
+) -> Vec<Item> {
+    // Leave one device pixel for the EMU-to-pixel rounding at the far edge.
+    // Without it the 585.6 px NASA image-credit line narrowly fit a 586.4 px
+    // body where LibreOffice wraps its final 38.8 px word.
+    let available_width = (rect.width - body.left_inset - body.right_inset - 1.0).max(1.0);
+    let kind = placeholder
+        .map(|value| value.kind.as_str())
+        .unwrap_or_default();
+    // DrawingML's percentage is applied to font line metrics, while our
+    // display-list boxes use the em square.  The measured equivalents in the
+    // NASA reference are 1.10 em for title wraps (87.8 px after a 60 pt line)
+    // and 1.08 em for body lines (51.9 px after a 36 pt line).
+    let line_spacing = match kind {
+        "title" | "ctrTitle" => 1.1,
+        "body" | "obj" => 1.08,
+        _ => 1.2,
+    };
+    let paragraph_before = if matches!(kind, "body" | "obj") {
+        13.333_333
+    } else {
+        0.0
+    };
+    let mut lines = Vec::<SlideLine>::new();
+    for (paragraph_index, paragraph) in body.paragraphs.iter().enumerate() {
+        let mut paragraph_lines = wrap_slide_paragraph(paragraph, available_width, kind);
+        if paragraph_lines.is_empty() {
+            paragraph_lines.push(SlideLine {
+                height: 24.0,
+                alignment: paragraph.alignment,
+                ..SlideLine::default()
+            });
+        }
+        if paragraph_index > 0 && paragraph_before > 0.0 {
+            lines.push(SlideLine {
+                height: paragraph_before,
+                ..SlideLine::default()
+            });
+        }
+        lines.extend(paragraph_lines);
+    }
+
+    if kind == "sldNum" {
+        for line in &mut lines {
+            line.alignment = TextAlignment::Right;
+        }
+    }
+    let content_height = lines
+        .iter()
+        .map(|line| {
+            if line.runs.is_empty() {
+                line.height
+            } else {
+                line.height * line_spacing
+            }
+        })
+        .sum::<f32>();
+    let inherited_anchor = if matches!(kind, "dt" | "ftr" | "sldNum") {
+        VerticalAnchor::Centre
+    } else {
+        body.anchor
+    };
+    let mut output = Vec::new();
+    let mut y = match inherited_anchor {
+        VerticalAnchor::Top => rect.y + body.top_inset,
+        VerticalAnchor::Centre => rect.y + (rect.height - content_height) / 2.0,
+        VerticalAnchor::Bottom => rect.y + rect.height - body.bottom_inset - content_height,
+    };
+    for line in lines {
+        let line_height = line.height.max(1.0);
+        if line.runs.is_empty() {
+            y += line_height;
+            continue;
+        }
+        let mut x = match line.alignment {
+            TextAlignment::Left => rect.x + body.left_inset,
+            TextAlignment::Centre => rect.x + (rect.width - line.width) / 2.0,
+            TextAlignment::Right => rect.x + rect.width - body.right_inset - line.width,
+        };
+        for run in line.runs {
+            let width = measure_text(&run.text, &run.style);
+            output.push(Item::Glyphs(shape(
+                &run.text,
+                &run.style,
+                Point {
+                    x,
+                    y: y + run.style.size_px,
+                },
+                Some(source.clone()),
+            )));
+            x += width;
+        }
+        y += line_height * line_spacing;
+    }
+    output
+}
+
+fn wrap_slide_paragraph(paragraph: &SlideParagraph, width: f32, kind: &str) -> Vec<SlideLine> {
+    let mut lines = Vec::new();
+    let mut line = SlideLine {
+        alignment: paragraph.alignment,
+        ..SlideLine::default()
+    };
+    for run in &paragraph.runs {
+        let mut style = run.style.clone();
+        if matches!(kind, "dt" | "ftr" | "sldNum") && style.size_px == 24.0 {
+            // The master footer placeholders use 12 pt default runs.  Slide
+            // fields omit `sz`, so the generic 18 pt presentation fallback
+            // made them 8 px too large.
+            style.size_px = 16.0;
+        }
+        for token in run.text.split_inclusive(char::is_whitespace) {
+            let token_width = measure_text(token, &style);
+            if line.width + token_width > width && !line.runs.is_empty() {
+                lines.push(std::mem::replace(
+                    &mut line,
+                    SlideLine {
+                        alignment: paragraph.alignment,
+                        ..SlideLine::default()
+                    },
+                ));
+            }
+            let text = if line.runs.is_empty() {
+                token.trim_start().to_owned()
+            } else {
+                token.to_owned()
+            };
+            if text.is_empty() {
+                line.height = line.height.max(style.size_px);
+                continue;
+            }
+            let measured = measure_text(&text, &style);
+            if let Some(previous) = line
+                .runs
+                .last_mut()
+                .filter(|previous| previous.style == style)
+            {
+                previous.text.push_str(&text);
+            } else {
+                line.runs.push(SlideRun {
+                    text,
+                    style: style.clone(),
+                });
+            }
+            line.width += measured;
+            line.height = line.height.max(style.size_px);
+        }
+    }
+    if !line.runs.is_empty() || line.height > 0.0 {
+        lines.push(line);
+    }
+    lines
+}
+
 fn parse_placeholder_geometry(bytes: &[u8]) -> BTreeMap<String, Rect> {
     let mut reader = quick_xml::Reader::from_reader(bytes);
     let mut output = BTreeMap::new();
     let mut in_shape = false;
-    let mut key = None::<String>;
+    let mut placeholder = None::<Placeholder>;
     let mut x = None::<f32>;
     let mut y = None::<f32>;
     let mut width = None::<f32>;
@@ -496,7 +822,7 @@ fn parse_placeholder_geometry(bytes: &[u8]) -> BTreeMap<String, Rect> {
         match reader.read_event() {
             Ok(Event::Start(start)) if xml::local_name(start.name().as_ref()) == b"sp" => {
                 in_shape = true;
-                key = None;
+                placeholder = None;
                 x = None;
                 y = None;
                 width = None;
@@ -505,7 +831,7 @@ fn parse_placeholder_geometry(bytes: &[u8]) -> BTreeMap<String, Rect> {
             Ok(Event::Empty(start)) | Ok(Event::Start(start))
                 if in_shape && xml::local_name(start.name().as_ref()) == b"ph" =>
             {
-                key = placeholder_key(&start);
+                placeholder = Some(parse_placeholder(&start));
             }
             Ok(Event::Empty(start))
                 if in_shape && xml::local_name(start.name().as_ref()) == b"off" =>
@@ -528,18 +854,18 @@ fn parse_placeholder_geometry(bytes: &[u8]) -> BTreeMap<String, Rect> {
                     .map(emu_value);
             }
             Ok(Event::End(end)) if xml::local_name(end.name().as_ref()) == b"sp" => {
-                if let (Some(key), Some(x), Some(y), Some(width), Some(height)) =
-                    (key.take(), x, y, width, height)
+                if let (Some(placeholder), Some(x), Some(y), Some(width), Some(height)) =
+                    (placeholder.take(), x, y, width, height)
                 {
-                    output.insert(
-                        key,
-                        Rect {
-                            x,
-                            y,
-                            width,
-                            height,
-                        },
-                    );
+                    let rect = Rect {
+                        x,
+                        y,
+                        width,
+                        height,
+                    };
+                    for key in placeholder.keys() {
+                        output.insert(key, rect);
+                    }
                 }
                 in_shape = false;
             }
@@ -550,11 +876,11 @@ fn parse_placeholder_geometry(bytes: &[u8]) -> BTreeMap<String, Rect> {
     output
 }
 
-fn placeholder_key(start: &quick_xml::events::BytesStart<'_>) -> Option<String> {
-    attr(start, b"idx")
-        .map(|value| format!("idx:{value}"))
-        .or_else(|| attr(start, b"type").map(|value| format!("type:{value}")))
-        .or_else(|| Some("type:body".into()))
+fn parse_placeholder(start: &quick_xml::events::BytesStart<'_>) -> Placeholder {
+    Placeholder {
+        index: attr(start, b"idx"),
+        kind: attr(start, b"type").unwrap_or_else(|| "body".into()),
+    }
 }
 
 fn preset_path(kind: &str, rect: Rect) -> Path {
