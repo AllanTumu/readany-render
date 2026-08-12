@@ -1,0 +1,786 @@
+{
+  "pages": [
+    {
+      "size": {
+        "width": 217.0,
+        "height": 64.8
+      },
+      "label": "Data",
+      "items": [
+        {
+          "kind": "Group",
+          "value": {
+            "items": [
+              {
+                "kind": "Glyphs",
+                "value": {
+                  "font": 1,
+                  "family": "Carlito",
+                  "size_px": 14.666667,
+                  "origin": {
+                    "x": 4.0,
+                    "y": 16.666668
+                  },
+                  "glyphs": [
+                    {
+                      "glyph_id": 7,
+                      "x_advance": 7.8203125,
+                      "x_offset": 0.0,
+                      "y_offset": -0.0,
+                      "cluster": 0
+                    },
+                    {
+                      "glyph_id": 111,
+                      "x_advance": 7.734375,
+                      "x_offset": 0.0,
+                      "y_offset": -0.0,
+                      "cluster": 1
+                    },
+                    {
+                      "glyph_id": 1140,
+                      "x_advance": 3.3658855,
+                      "x_offset": 0.0,
+                      "y_offset": -0.0,
+                      "cluster": 2
+                    },
+                    {
+                      "glyph_id": 134,
+                      "x_advance": 7.7057295,
+                      "x_offset": 0.0,
+                      "y_offset": -0.0,
+                      "cluster": 3
+                    },
+                    {
+                      "glyph_id": 108,
+                      "x_advance": 11.716146,
+                      "x_offset": 0.0,
+                      "y_offset": -0.0,
+                      "cluster": 4
+                    },
+                    {
+                      "glyph_id": 109,
+                      "x_advance": 7.7057295,
+                      "x_offset": 0.0,
+                      "y_offset": -0.0,
+                      "cluster": 5
+                    },
+                    {
+                      "glyph_id": 2,
+                      "x_advance": 3.3157554,
+                      "x_offset": 0.0,
+                      "y_offset": -0.0,
+                      "cluster": 6
+                    },
+                    {
+                      "glyph_id": 400,
+                      "x_advance": 7.4335938,
+                      "x_offset": 0.0,
+                      "y_offset": -0.0,
+                      "cluster": 7
+                    }
+                  ],
+                  "text": "Column 1",
+                  "colour": {
+                    "r": 0,
+                    "g": 0,
+                    "b": 0,
+                    "a": 255
+                  },
+                  "rotation_deg": 0.0,
+                  "source": {
+                    "kind": "Cell",
+                    "sheet": 0,
+                    "row": 0,
+                    "column": 0
+                  }
+                }
+              }
+            ],
+            "clip": {
+              "x": 0.0,
+              "y": 0.0,
+              "width": 89.0,
+              "height": 21.6
+            },
+            "source": {
+              "kind": "Cell",
+              "sheet": 0,
+              "row": 0,
+              "column": 0
+            }
+          }
+        },
+        {
+          "kind": "Group",
+          "value": {
+            "items": [
+              {
+                "kind": "Glyphs",
+                "value": {
+                  "font": 1,
+                  "family": "Carlito",
+                  "size_px": 14.666667,
+                  "origin": {
+                    "x": 93.0,
+                    "y": 16.666668
+                  },
+                  "glyphs": [
+                    {
+                      "glyph_id": 7,
+                      "x_advance": 7.8203125,
+                      "x_offset": 0.0,
+                      "y_offset": -0.0,
+                      "cluster": 0
+                    },
+                    {
+                      "glyph_id": 111,
+                      "x_advance": 7.734375,
+                      "x_offset": 0.0,
+                      "y_offset": -0.0,
+                      "cluster": 1
+                    },
+                    {
+                      "glyph_id": 1140,
+                      "x_advance": 3.3658855,
+                      "x_offset": 0.0,
+                      "y_offset": -0.0,
+                      "cluster": 2
+                    },
+                    {
+                      "glyph_id": 134,
+                      "x_advance": 7.7057295,
+                      "x_offset": 0.0,
+                      "y_offset": -0.0,
+                      "cluster": 3
+                    },
+                    {
+                      "glyph_id": 108,
+                      "x_advance": 11.716146,
+                      "x_offset": 0.0,
+                      "y_offset": -0.0,
+                      "cluster": 4
+                    },
+                    {
+                      "glyph_id": 109,
+                      "x_advance": 7.7057295,
+                      "x_offset": 0.0,
+                      "y_offset": -0.0,
+                      "cluster": 5
+                    },
+                    {
+                      "glyph_id": 2,
+                      "x_advance": 3.3157554,
+                      "x_offset": 0.0,
+                      "y_offset": -0.0,
+                      "cluster": 6
+                    },
+                    {
+                      "glyph_id": 401,
+                      "x_advance": 7.4335938,
+                      "x_offset": 0.0,
+                      "y_offset": -0.0,
+                      "cluster": 7
+                    }
+                  ],
+                  "text": "Column 2",
+                  "colour": {
+                    "r": 0,
+                    "g": 0,
+                    "b": 0,
+                    "a": 255
+                  },
+                  "rotation_deg": 0.0,
+                  "source": {
+                    "kind": "Cell",
+                    "sheet": 0,
+                    "row": 0,
+                    "column": 1
+                  }
+                }
+              }
+            ],
+            "clip": {
+              "x": 89.0,
+              "y": 0.0,
+              "width": 64.0,
+              "height": 21.6
+            },
+            "source": {
+              "kind": "Cell",
+              "sheet": 0,
+              "row": 0,
+              "column": 1
+            }
+          }
+        },
+        {
+          "kind": "Group",
+          "value": {
+            "items": [
+              {
+                "kind": "Glyphs",
+                "value": {
+                  "font": 1,
+                  "family": "Carlito",
+                  "size_px": 14.666667,
+                  "origin": {
+                    "x": 157.0,
+                    "y": 16.666668
+                  },
+                  "glyphs": [
+                    {
+                      "glyph_id": 7,
+                      "x_advance": 7.8203125,
+                      "x_offset": 0.0,
+                      "y_offset": -0.0,
+                      "cluster": 0
+                    },
+                    {
+                      "glyph_id": 111,
+                      "x_advance": 7.734375,
+                      "x_offset": 0.0,
+                      "y_offset": -0.0,
+                      "cluster": 1
+                    },
+                    {
+                      "glyph_id": 1140,
+                      "x_advance": 3.3658855,
+                      "x_offset": 0.0,
+                      "y_offset": -0.0,
+                      "cluster": 2
+                    },
+                    {
+                      "glyph_id": 134,
+                      "x_advance": 7.7057295,
+                      "x_offset": 0.0,
+                      "y_offset": -0.0,
+                      "cluster": 3
+                    },
+                    {
+                      "glyph_id": 108,
+                      "x_advance": 11.716146,
+                      "x_offset": 0.0,
+                      "y_offset": -0.0,
+                      "cluster": 4
+                    },
+                    {
+                      "glyph_id": 109,
+                      "x_advance": 7.7057295,
+                      "x_offset": 0.0,
+                      "y_offset": -0.0,
+                      "cluster": 5
+                    },
+                    {
+                      "glyph_id": 2,
+                      "x_advance": 3.3157554,
+                      "x_offset": 0.0,
+                      "y_offset": -0.0,
+                      "cluster": 6
+                    },
+                    {
+                      "glyph_id": 402,
+                      "x_advance": 7.4335938,
+                      "x_offset": 0.0,
+                      "y_offset": -0.0,
+                      "cluster": 7
+                    }
+                  ],
+                  "text": "Column 3",
+                  "colour": {
+                    "r": 0,
+                    "g": 0,
+                    "b": 0,
+                    "a": 255
+                  },
+                  "rotation_deg": 0.0,
+                  "source": {
+                    "kind": "Cell",
+                    "sheet": 0,
+                    "row": 0,
+                    "column": 2
+                  }
+                }
+              }
+            ],
+            "clip": {
+              "x": 153.0,
+              "y": 0.0,
+              "width": 64.0,
+              "height": 21.6
+            },
+            "source": {
+              "kind": "Cell",
+              "sheet": 0,
+              "row": 0,
+              "column": 2
+            }
+          }
+        },
+        {
+          "kind": "Group",
+          "value": {
+            "items": [
+              {
+                "kind": "Glyphs",
+                "value": {
+                  "font": 1,
+                  "family": "Carlito",
+                  "size_px": 14.666667,
+                  "origin": {
+                    "x": 58.996742,
+                    "y": 38.266666
+                  },
+                  "glyphs": [
+                    {
+                      "glyph_id": 401,
+                      "x_advance": 7.4335938,
+                      "x_offset": 0.0,
+                      "y_offset": 0.0,
+                      "cluster": 0
+                    },
+                    {
+                      "glyph_id": 314,
+                      "x_advance": 3.702474,
+                      "x_offset": 0.0,
+                      "y_offset": 0.0,
+                      "cluster": 1
+                    },
+                    {
+                      "glyph_id": 399,
+                      "x_advance": 7.4335938,
+                      "x_offset": 0.0,
+                      "y_offset": 0.0,
+                      "cluster": 2
+                    },
+                    {
+                      "glyph_id": 399,
+                      "x_advance": 7.4335938,
+                      "x_offset": 0.0,
+                      "y_offset": 0.0,
+                      "cluster": 3
+                    }
+                  ],
+                  "text": "2.00",
+                  "colour": {
+                    "r": 0,
+                    "g": 0,
+                    "b": 0,
+                    "a": 255
+                  },
+                  "rotation_deg": 0.0,
+                  "source": {
+                    "kind": "Cell",
+                    "sheet": 0,
+                    "row": 1,
+                    "column": 0
+                  }
+                }
+              }
+            ],
+            "clip": {
+              "x": 0.0,
+              "y": 21.6,
+              "width": 89.0,
+              "height": 21.6
+            },
+            "source": {
+              "kind": "Cell",
+              "sheet": 0,
+              "row": 1,
+              "column": 0
+            }
+          }
+        },
+        {
+          "kind": "Group",
+          "value": {
+            "items": [
+              {
+                "kind": "Glyphs",
+                "value": {
+                  "font": 1,
+                  "family": "Carlito",
+                  "size_px": 14.666667,
+                  "origin": {
+                    "x": 122.99674,
+                    "y": 38.266666
+                  },
+                  "glyphs": [
+                    {
+                      "glyph_id": 403,
+                      "x_advance": 7.4335938,
+                      "x_offset": 0.0,
+                      "y_offset": 0.0,
+                      "cluster": 0
+                    },
+                    {
+                      "glyph_id": 314,
+                      "x_advance": 3.702474,
+                      "x_offset": 0.0,
+                      "y_offset": 0.0,
+                      "cluster": 1
+                    },
+                    {
+                      "glyph_id": 399,
+                      "x_advance": 7.4335938,
+                      "x_offset": 0.0,
+                      "y_offset": 0.0,
+                      "cluster": 2
+                    },
+                    {
+                      "glyph_id": 399,
+                      "x_advance": 7.4335938,
+                      "x_offset": 0.0,
+                      "y_offset": 0.0,
+                      "cluster": 3
+                    }
+                  ],
+                  "text": "4.00",
+                  "colour": {
+                    "r": 0,
+                    "g": 0,
+                    "b": 0,
+                    "a": 255
+                  },
+                  "rotation_deg": 0.0,
+                  "source": {
+                    "kind": "Cell",
+                    "sheet": 0,
+                    "row": 1,
+                    "column": 1
+                  }
+                }
+              }
+            ],
+            "clip": {
+              "x": 89.0,
+              "y": 21.6,
+              "width": 64.0,
+              "height": 21.6
+            },
+            "source": {
+              "kind": "Cell",
+              "sheet": 0,
+              "row": 1,
+              "column": 1
+            }
+          }
+        },
+        {
+          "kind": "Group",
+          "value": {
+            "items": [
+              {
+                "kind": "Glyphs",
+                "value": {
+                  "font": 1,
+                  "family": "Carlito",
+                  "size_px": 14.666667,
+                  "origin": {
+                    "x": 186.99675,
+                    "y": 38.266666
+                  },
+                  "glyphs": [
+                    {
+                      "glyph_id": 1141,
+                      "x_advance": 7.4335938,
+                      "x_offset": 0.0,
+                      "y_offset": 0.0,
+                      "cluster": 0
+                    },
+                    {
+                      "glyph_id": 314,
+                      "x_advance": 3.702474,
+                      "x_offset": 0.0,
+                      "y_offset": 0.0,
+                      "cluster": 1
+                    },
+                    {
+                      "glyph_id": 399,
+                      "x_advance": 7.4335938,
+                      "x_offset": 0.0,
+                      "y_offset": 0.0,
+                      "cluster": 2
+                    },
+                    {
+                      "glyph_id": 399,
+                      "x_advance": 7.4335938,
+                      "x_offset": 0.0,
+                      "y_offset": 0.0,
+                      "cluster": 3
+                    }
+                  ],
+                  "text": "6.00",
+                  "colour": {
+                    "r": 0,
+                    "g": 0,
+                    "b": 0,
+                    "a": 255
+                  },
+                  "rotation_deg": 0.0,
+                  "source": {
+                    "kind": "Cell",
+                    "sheet": 0,
+                    "row": 1,
+                    "column": 2
+                  }
+                }
+              }
+            ],
+            "clip": {
+              "x": 153.0,
+              "y": 21.6,
+              "width": 64.0,
+              "height": 21.6
+            },
+            "source": {
+              "kind": "Cell",
+              "sheet": 0,
+              "row": 1,
+              "column": 2
+            }
+          }
+        },
+        {
+          "kind": "Group",
+          "value": {
+            "items": [
+              {
+                "kind": "Glyphs",
+                "value": {
+                  "font": 1,
+                  "family": "Carlito",
+                  "size_px": 14.666667,
+                  "origin": {
+                    "x": 58.996742,
+                    "y": 59.866673
+                  },
+                  "glyphs": [
+                    {
+                      "glyph_id": 402,
+                      "x_advance": 7.4335938,
+                      "x_offset": 0.0,
+                      "y_offset": 0.0,
+                      "cluster": 0
+                    },
+                    {
+                      "glyph_id": 314,
+                      "x_advance": 3.702474,
+                      "x_offset": 0.0,
+                      "y_offset": 0.0,
+                      "cluster": 1
+                    },
+                    {
+                      "glyph_id": 399,
+                      "x_advance": 7.4335938,
+                      "x_offset": 0.0,
+                      "y_offset": 0.0,
+                      "cluster": 2
+                    },
+                    {
+                      "glyph_id": 399,
+                      "x_advance": 7.4335938,
+                      "x_offset": 0.0,
+                      "y_offset": 0.0,
+                      "cluster": 3
+                    }
+                  ],
+                  "text": "3.00",
+                  "colour": {
+                    "r": 0,
+                    "g": 0,
+                    "b": 0,
+                    "a": 255
+                  },
+                  "rotation_deg": 0.0,
+                  "source": {
+                    "kind": "Cell",
+                    "sheet": 0,
+                    "row": 2,
+                    "column": 0
+                  }
+                }
+              }
+            ],
+            "clip": {
+              "x": 0.0,
+              "y": 43.2,
+              "width": 89.0,
+              "height": 21.600002
+            },
+            "source": {
+              "kind": "Cell",
+              "sheet": 0,
+              "row": 2,
+              "column": 0
+            }
+          }
+        },
+        {
+          "kind": "Group",
+          "value": {
+            "items": [
+              {
+                "kind": "Glyphs",
+                "value": {
+                  "font": 1,
+                  "family": "Carlito",
+                  "size_px": 14.666667,
+                  "origin": {
+                    "x": 122.99674,
+                    "y": 59.866673
+                  },
+                  "glyphs": [
+                    {
+                      "glyph_id": 1141,
+                      "x_advance": 7.4335938,
+                      "x_offset": 0.0,
+                      "y_offset": 0.0,
+                      "cluster": 0
+                    },
+                    {
+                      "glyph_id": 314,
+                      "x_advance": 3.702474,
+                      "x_offset": 0.0,
+                      "y_offset": 0.0,
+                      "cluster": 1
+                    },
+                    {
+                      "glyph_id": 399,
+                      "x_advance": 7.4335938,
+                      "x_offset": 0.0,
+                      "y_offset": 0.0,
+                      "cluster": 2
+                    },
+                    {
+                      "glyph_id": 399,
+                      "x_advance": 7.4335938,
+                      "x_offset": 0.0,
+                      "y_offset": 0.0,
+                      "cluster": 3
+                    }
+                  ],
+                  "text": "6.00",
+                  "colour": {
+                    "r": 0,
+                    "g": 0,
+                    "b": 0,
+                    "a": 255
+                  },
+                  "rotation_deg": 0.0,
+                  "source": {
+                    "kind": "Cell",
+                    "sheet": 0,
+                    "row": 2,
+                    "column": 1
+                  }
+                }
+              }
+            ],
+            "clip": {
+              "x": 89.0,
+              "y": 43.2,
+              "width": 64.0,
+              "height": 21.600002
+            },
+            "source": {
+              "kind": "Cell",
+              "sheet": 0,
+              "row": 2,
+              "column": 1
+            }
+          }
+        },
+        {
+          "kind": "Group",
+          "value": {
+            "items": [
+              {
+                "kind": "Glyphs",
+                "value": {
+                  "font": 1,
+                  "family": "Carlito",
+                  "size_px": 14.666667,
+                  "origin": {
+                    "x": 186.99675,
+                    "y": 59.866673
+                  },
+                  "glyphs": [
+                    {
+                      "glyph_id": 406,
+                      "x_advance": 7.4335938,
+                      "x_offset": 0.0,
+                      "y_offset": 0.0,
+                      "cluster": 0
+                    },
+                    {
+                      "glyph_id": 314,
+                      "x_advance": 3.702474,
+                      "x_offset": 0.0,
+                      "y_offset": 0.0,
+                      "cluster": 1
+                    },
+                    {
+                      "glyph_id": 399,
+                      "x_advance": 7.4335938,
+                      "x_offset": 0.0,
+                      "y_offset": 0.0,
+                      "cluster": 2
+                    },
+                    {
+                      "glyph_id": 399,
+                      "x_advance": 7.4335938,
+                      "x_offset": 0.0,
+                      "y_offset": 0.0,
+                      "cluster": 3
+                    }
+                  ],
+                  "text": "9.00",
+                  "colour": {
+                    "r": 0,
+                    "g": 0,
+                    "b": 0,
+                    "a": 255
+                  },
+                  "rotation_deg": 0.0,
+                  "source": {
+                    "kind": "Cell",
+                    "sheet": 0,
+                    "row": 2,
+                    "column": 2
+                  }
+                }
+              }
+            ],
+            "clip": {
+              "x": 153.0,
+              "y": 43.2,
+              "width": 64.0,
+              "height": 21.600002
+            },
+            "source": {
+              "kind": "Cell",
+              "sheet": 0,
+              "row": 2,
+              "column": 2
+            }
+          }
+        }
+      ],
+      "source": null,
+      "frozen": {
+        "rows": 1,
+        "columns": 1
+      }
+    }
+  ],
+  "format": "xlsx",
+  "unrendered": [],
+  "meta": {
+    "title": null,
+    "creator": null,
+    "substituted_fonts": {
+      "Calibri": "Carlito"
+    }
+  }
+}

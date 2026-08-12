@@ -1,0 +1,35 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/readany-render",
+  "crates/readany-render-cli",
+  "crates/readany-render-wasm",
+  "harness",
+]
+exclude = ["fuzz"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+repository = "https://github.com/AllanTumu/readany-render"
+
+[workspace.dependencies]
+base64 = "0.22"
+encoding_rs = "0.8"
+image = { version = "=0.25.8", default-features = false, features = ["png", "jpeg", "gif", "bmp", "webp"] }
+font-types = "=0.12.0"
+quick-xml = "0.41"
+harfrust = "0.12"
+kamadak-exif = "0.6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde-wasm-bindgen = "0.6"
+thiserror = "2"
+tiny-skia = "0.11"
+skrifa = "0.44"
+unicode-bidi = "0.3"
+unicode-linebreak = "0.1"
+wasm-bindgen = "0.2"
+zip = { version = "5", default-features = false, features = ["deflate"] }

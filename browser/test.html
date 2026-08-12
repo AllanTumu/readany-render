@@ -1,0 +1,6 @@
+<!doctype html><meta charset="utf-8"><canvas id="canvas"></canvas>
+<script type="module">
+import init, { render, renderToCanvas } from "/pkg/readany_render_wasm.js";
+const tasks=[];new PerformanceObserver(list=>tasks.push(...list.getEntries().map(entry=>entry.duration))).observe({type:"longtask",buffered:true});
+try{await init();const bytes=new Uint8Array(await(await fetch("/fixtures/basic.xlsx")).arrayBuffer());const model=render(bytes,{filename:"basic.xlsx"});const canvas=document.querySelector("#canvas");renderToCanvas(model,0,canvas,{scale:1});const pixels=canvas.getContext("2d").getImageData(0,0,canvas.width,canvas.height).data;let dark=0;for(let i=0;i<pixels.length;i+=4){if(pixels[i]<250||pixels[i+1]<250||pixels[i+2]<250)dark++;}document.body.dataset.format=model.format;document.body.dataset.pages=String(model.pages.length);document.body.dataset.dark=String(dark);document.body.dataset.longTask=String(Math.max(0,...tasks));}catch(error){document.body.dataset.error=String(error);}document.body.dataset.done="true";
+</script>

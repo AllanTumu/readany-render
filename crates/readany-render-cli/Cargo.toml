@@ -1,0 +1,15 @@
+[package]
+name = "readany-render-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "readany-render"
+path = "src/main.rs"
+
+[dependencies]
+readany-render = { version = "0.1.0", path = "../readany-render" }
+serde_json.workspace = true

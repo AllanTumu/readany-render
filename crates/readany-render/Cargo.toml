@@ -1,0 +1,42 @@
+[package]
+name = "readany-render"
+description = "Page-faithful display lists and rasterisation for office documents"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "../../README.md"
+keywords = ["document", "renderer", "xlsx", "docx", "wasm"]
+categories = ["rendering", "parser-implementations", "wasm"]
+exclude = ["tests/"]
+
+[features]
+default = ["fonts"]
+fonts = []
+native = []
+fuzzing = []
+
+[dependencies]
+base64.workspace = true
+encoding_rs.workspace = true
+# Constrains read-fonts to the final font-types release supporting the 1.85 MSRV.
+font-types.workspace = true
+image.workspace = true
+kamadak-exif.workspace = true
+quick-xml.workspace = true
+harfrust.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tiny-skia.workspace = true
+skrifa.workspace = true
+unicode-bidi.workspace = true
+unicode-linebreak.workspace = true
+zip.workspace = true
+
+[dev-dependencies]
+proptest = "1"
+
+[package.metadata.docs.rs]
+all-features = true

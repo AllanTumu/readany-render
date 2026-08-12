@@ -1,0 +1,25 @@
+[package]
+name = "readany-render-wasm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "WebAssembly bindings for page-faithful office document display lists"
+repository.workspace = true
+
+[features]
+default = []
+fonts = ["readany-render/fonts"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+readany-render = { version = "0.1.0", path = "../readany-render", default-features = false }
+serde.workspace = true
+serde-wasm-bindgen.workspace = true
+skrifa.workspace = true
+wasm-bindgen.workspace = true
+js-sys = "0.3"
+web-sys = { version = "0.3", features = ["CanvasRenderingContext2d", "HtmlCanvasElement", "ImageData"] }

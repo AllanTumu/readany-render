@@ -1,0 +1,24 @@
+{
+  "name": "readany-render",
+  "version": "0.1.0",
+  "description": "Page-faithful office document display lists for browsers",
+  "license": "MIT",
+  "repository": "https://github.com/AllanTumu/readany-render",
+  "keywords": ["document", "renderer", "xlsx", "docx", "wasm"],
+  "sideEffects": false,
+  "types": "./readany_render_wasm.d.ts",
+  "files": ["README.md", "readany_render_wasm_bg.wasm", "readany_render_wasm.js", "readany_render_wasm.d.ts", "font-licenses/"],
+  "exports": {
+    ".": {
+      "types": "./readany_render_wasm.d.ts",
+      "browser": "./readany_render_wasm.js",
+      "import": "./readany_render_wasm.js",
+      "default": "./readany_render_wasm.js"
+    },
+    "./no-bundler": {
+      "types": "./readany_render_wasm.d.ts",
+      "import": "./readany_render_wasm.js",
+      "default": "./readany_render_wasm.js"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+/target/
+/pkg/
+/harness/report/*.png
+/harness/report/scores.json
+*.wasm.gz
+.DS_Store
+/browser/node_modules/
+/browser/test-results/
+/browser/playwright-report/
+/fuzz/target/
+/fuzz/corpus/
+/fuzz/artifacts/
