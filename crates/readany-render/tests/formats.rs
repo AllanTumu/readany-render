@@ -56,6 +56,65 @@ fn xlsx_declared_default_row_height_controls_sheet_geometry() {
 }
 
 #[test]
+fn sheet_headers_are_opt_in_and_frozen_panes_expose_pixel_extents() {
+    let bytes = fixture("basic.xlsx");
+    let plain = render(
+        &bytes,
+        &Options {
+            filename: Some("basic.xlsx"),
+            ..Options::default()
+        },
+    )
+    .expect("the workbook renders without optional furniture");
+    let labelled = render(
+        &bytes,
+        &Options {
+            filename: Some("basic.xlsx"),
+            sheet_headers: true,
+            ..Options::default()
+        },
+    )
+    .expect("the workbook renders with optional furniture");
+    assert_eq!(
+        plain.pages[0].size.width + 48.0,
+        labelled.pages[0].size.width
+    );
+    assert_eq!(
+        plain.pages[0].size.height + 24.0,
+        labelled.pages[0].size.height
+    );
+    let header_labels = labelled.pages[0]
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Glyphs(run) => Some(run.text.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(header_labels, ["A", "B", "C", "1", "2", "3"]);
+    let frozen = labelled.pages[0]
+        .frozen
+        .expect("the fixture freezes its first row and column");
+    assert_eq!((frozen.rows, frozen.columns), (1, 1));
+    assert_eq!((frozen.width, frozen.height), (137.0, 44.0));
+
+    let ods = render(
+        &fixture("basic.ods"),
+        &Options {
+            filename: Some("basic.ods"),
+            sheet_headers: true,
+            ..Options::default()
+        },
+    )
+    .expect("ODS exposes the same optional headers and frozen extents");
+    let ods_frozen = ods.pages[0]
+        .frozen
+        .expect("the ODS fixture freezes its first row and column");
+    assert_eq!((ods_frozen.rows, ods_frozen.columns), (1, 1));
+    assert_eq!((ods_frozen.width, ods_frozen.height), (128.0, 46.0));
+}
+
+#[test]
 fn every_supported_family_reaches_a_display_list_or_deliberate_delegate() {
     for (name, expected) in [
         ("basic.csv", Format::Csv),

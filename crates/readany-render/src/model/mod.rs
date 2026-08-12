@@ -143,10 +143,14 @@ pub enum Item {
     Group(Group),
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct FrozenPanes {
     pub rows: u32,
     pub columns: u32,
+    /// Horizontal frozen extent in display-list pixels.
+    pub width: f32,
+    /// Vertical frozen extent in display-list pixels.
+    pub height: f32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

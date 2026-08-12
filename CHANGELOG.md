@@ -22,11 +22,13 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   `Document` handle for viewport pixels, page metadata, and visible items.
 - Real-workbook performance and natural-sheet fidelity corpora, a photographed
   receipt image, and an official sample statement delegation contract.
+- Default-on XLSX/ODS gridlines with file visibility and colour, opt-in row and
+  column headers, and frozen-pane pixel extents for independently painted views.
 
 ### Changed
 
-- Spreadsheet cells paint only source-defined fills and borders; application UI
-  gridlines are no longer invented as document content.
+- Spreadsheet gridlines are modelled as source view furniture beneath cell fills
+  and explicit borders rather than being confused with source-defined borders.
 - Excel `General` numbers are formatted from their numeric value, column width
   conversion matches the producer raster more closely, and repeated shaping is
   cached within a render.

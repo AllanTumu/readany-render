@@ -2,7 +2,7 @@ export interface Point { x: number; y: number }
 export interface Size { width: number; height: number }
 export interface Rect extends Point, Size {}
 export interface Colour { r: number; g: number; b: number; a: number }
-export interface FrozenPanes { rows: number; columns: number }
+export interface FrozenPanes { rows: number; columns: number; width: number; height: number }
 export interface PositionedGlyph {
   glyph_id: number;
   x_advance: number;
@@ -70,7 +70,7 @@ export interface Meta {
   substituted_fonts: Record<string, string>;
 }
 export interface Rendered { pages: Page[]; format: Format; unrendered: Unrendered[]; meta: Meta }
-export interface RenderOptions { filename?: string; strict?: boolean; only?: { first: number; last: number } }
+export interface RenderOptions { filename?: string; strict?: boolean; sheetHeaders?: boolean; only?: { first: number; last: number } }
 export interface RasterOptions { scale?: number }
 export default function init(input?: RequestInfo | URL | Response | BufferSource | WebAssembly.Module): Promise<unknown>;
 /**

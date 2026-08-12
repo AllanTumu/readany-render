@@ -1,4 +1,5 @@
 use crate::model::*;
+use crate::sheet::{paint_sheet_headers, sheet_origin};
 use crate::text::{TextStyle, measure, shape};
 use crate::{Format, Options, RenderError, RenderErrorCode};
 use encoding_rs::{UTF_16BE, UTF_16LE, WINDOWS_1252};
@@ -30,10 +31,19 @@ pub(crate) fn render(
     let height = 22.0_f32;
     let page_width = widths.iter().sum::<f32>().max(1.0);
     let page_height = (rows.len() as f32 * height).max(1.0);
+    let origin = sheet_origin(options.sheet_headers);
+    let mut xs = Vec::with_capacity(widths.len() + 1);
+    xs.push(0.0);
+    for width in &widths {
+        xs.push(xs.last().copied().unwrap_or(0.0) + width);
+    }
+    let ys = (0..=rows.len())
+        .map(|row| row as f32 * height)
+        .collect::<Vec<_>>();
     let mut items = Vec::new();
-    let mut y = 0.0;
+    let mut y = origin.y;
     for (row_index, row) in rows.iter().enumerate() {
-        let mut x = 0.0;
+        let mut x = origin.x;
         for (column, column_width) in widths.iter().copied().enumerate().take(columns) {
             let source = SourceRef::Cell {
                 sheet: 0,
@@ -80,11 +90,14 @@ pub(crate) fn render(
         }
         y += height;
     }
+    if options.sheet_headers {
+        paint_sheet_headers(&mut items, &xs, &ys, 0);
+    }
     Ok(Rendered {
         pages: vec![Page {
             size: Size {
-                width: page_width,
-                height: page_height,
+                width: origin.x + page_width,
+                height: origin.y + page_height,
             },
             label: options.filename.map(str::to_owned),
             items,

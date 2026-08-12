@@ -64,3 +64,15 @@ The old XLSX/ODS scores of 0.987544 and 0.995099 are withdrawn because white
 padding dominated them. The later unaligned sheet mean of 0.473395 is also not
 fidelity evidence. Likewise, approximately 0.99 scores on sparse page fixtures
 are pixel diagnostics only: their low ink density cannot prove layout fidelity.
+
+### Gridline before/after diagnostic
+
+The missing-gridline hypothesis was measured rather than assumed. Before sheet
+gridlines were implemented, our/reference ink was 5.9187%/6.7182% on Endo and
+12.0678%/13.9774% on OakPrism: relative gaps of 11.9% and 13.7%. With the
+workbook's default-on gridlines painted, the same figures became
+14.8375%/6.7182% and 21.6146%/13.9774%. That deliberately recorded result shows
+the reference HTML export does not preserve Calc's interactive grid furniture;
+its old ink gap was not a valid way to tune gridline darkness. Grid visibility,
+indexed colour, z-order, and raster output are therefore pinned structurally
+and visually, while pixel ink remains a diagnostic rather than a release gate.

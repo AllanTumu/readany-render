@@ -379,6 +379,17 @@ fn parse_colour(start: &BytesStart<'_>) -> Option<Colour> {
             });
         }
     }
+    if let Some(index) = number(start, b"indexed") {
+        return indexed_colour(index);
+    }
+    match number(start, b"theme") {
+        Some(0) => Some(Colour::WHITE),
+        Some(1) => Some(Colour::BLACK),
+        _ => None,
+    }
+}
+
+pub(crate) fn indexed_colour(index: u32) -> Option<Colour> {
     const INDEXED: [Colour; 16] = [
         Colour {
             r: 0,
@@ -477,14 +488,7 @@ fn parse_colour(start: &BytesStart<'_>) -> Option<Colour> {
             a: 255,
         },
     ];
-    if let Some(index) = number(start, b"indexed") {
-        return INDEXED.get(index as usize).copied();
-    }
-    match number(start, b"theme") {
-        Some(0) => Some(Colour::WHITE),
-        Some(1) => Some(Colour::BLACK),
-        _ => None,
-    }
+    INDEXED.get(index as usize).copied()
 }
 
 fn boolean(start: &BytesStart<'_>, absent_value: bool) -> bool {

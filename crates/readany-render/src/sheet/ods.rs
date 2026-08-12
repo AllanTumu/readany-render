@@ -3,6 +3,9 @@ use crate::model::*;
 use crate::sheet::styles::{
     AlignmentStyle, BorderSide, BorderStyle, CellStyle, FillStyle, FontStyle,
 };
+use crate::sheet::{
+    DEFAULT_GRID_COLOUR, frozen_with_extents, paint_gridlines, paint_sheet_headers, sheet_origin,
+};
 use crate::text::{TextStyle, measure, shape};
 use crate::{Format, Options, RenderError};
 use quick_xml::events::{BytesStart, Event};
@@ -18,12 +21,12 @@ pub(crate) fn render(bytes: &[u8], options: &Options<'_>) -> Result<Rendered, Re
         styles.parse_part(bytes)?;
     }
     styles.parse_part(content)?;
-    let frozen = archive
+    let view = archive
         .get("settings.xml")
-        .map(parse_frozen)
+        .map(parse_view_settings)
         .transpose()?
-        .flatten();
-    let parsed = parse_tables(content, &styles, frozen, options)?;
+        .unwrap_or_default();
+    let parsed = parse_tables(content, &styles, view, options)?;
     Ok(Rendered {
         pages: parsed.pages,
         format: Format::Ods,
@@ -213,10 +216,34 @@ struct ParsedTables {
     unrendered: Vec<Unrendered>,
 }
 
+struct PageContext<'a> {
+    sheet: u32,
+    view: OdsView,
+    styles: &'a OdsStyles,
+    sheet_headers: bool,
+}
+
+#[derive(Clone, Copy)]
+struct OdsView {
+    frozen: Option<FrozenPanes>,
+    show_grid_lines: bool,
+    grid_colour: Colour,
+}
+
+impl Default for OdsView {
+    fn default() -> Self {
+        Self {
+            frozen: None,
+            show_grid_lines: true,
+            grid_colour: DEFAULT_GRID_COLOUR,
+        }
+    }
+}
+
 fn parse_tables(
     bytes: &[u8],
     styles: &OdsStyles,
-    frozen: Option<FrozenPanes>,
+    view: OdsView,
     options: &Options<'_>,
 ) -> Result<ParsedTables, RenderError> {
     let mut reader = quick_xml::Reader::from_reader(bytes);
@@ -252,7 +279,18 @@ fn parse_tables(
             Ok(Event::End(end)) if xml::local_name(end.name().as_ref()) == b"table" => {
                 in_table = false;
                 if !unrendered.iter().any(|entry| matches!(entry, Unrendered::HiddenSheet { name } if name == &table_name)) {
-                    pages.push(make_page(&table_name, &rows, &column_widths, &row_heights, pages.len() as u32, frozen, styles));
+                    pages.push(make_page(
+                        &table_name,
+                        &rows,
+                        &column_widths,
+                        &row_heights,
+                        PageContext {
+                            sheet: pages.len() as u32,
+                            view,
+                            styles,
+                            sheet_headers: options.sheet_headers,
+                        },
+                    ));
                 }
             }
             Ok(Event::Empty(start)) | Ok(Event::Start(start))
@@ -386,9 +424,7 @@ fn make_page(
     rows: &[Vec<Cell>],
     provided_widths: &[f32],
     row_heights: &[f32],
-    sheet: u32,
-    frozen: Option<FrozenPanes>,
-    styles: &OdsStyles,
+    context: PageContext<'_>,
 ) -> Page {
     let columns = rows
         .iter()
@@ -404,7 +440,18 @@ fn make_page(
         .collect::<Vec<_>>();
     let xs = prefix(&widths);
     let ys = prefix(&heights);
+    let origin = sheet_origin(context.sheet_headers);
     let mut items = Vec::new();
+    if context.view.show_grid_lines {
+        paint_gridlines(
+            &mut items,
+            &xs,
+            &ys,
+            origin,
+            context.view.grid_colour,
+            context.sheet,
+        );
+    }
     for (row_index, row) in rows.iter().enumerate() {
         for (column_index, cell) in row.iter().enumerate() {
             if cell.covered || column_index >= columns {
@@ -415,29 +462,32 @@ fn make_page(
                 .min(columns);
             let end_row = row_index.saturating_add(cell.rows as usize).min(rows.len());
             let rect = Rect {
-                x: xs[column_index],
-                y: ys[row_index],
+                x: origin.x + xs[column_index],
+                y: origin.y + ys[row_index],
                 width: xs[end_column] - xs[column_index],
                 height: ys[end_row] - ys[row_index],
             };
             let source = SourceRef::Cell {
-                sheet,
+                sheet: context.sheet,
                 row: row_index as u32,
                 column: column_index as u32,
             };
-            let style = styles.resolve(Some(&cell.style)).cell;
+            let style = context.styles.resolve(Some(&cell.style)).cell;
             paint_cell(&mut items, rect, cell.text.trim_end(), source, &style);
         }
     }
+    if context.sheet_headers {
+        paint_sheet_headers(&mut items, &xs, &ys, context.sheet);
+    }
     Page {
         size: Size {
-            width: xs.last().copied().unwrap_or(0.0),
-            height: ys.last().copied().unwrap_or(0.0),
+            width: origin.x + xs.last().copied().unwrap_or(0.0),
+            height: origin.y + ys.last().copied().unwrap_or(0.0),
         },
         label: Some(name.into()),
         items,
         source: None,
-        frozen,
+        frozen: frozen_with_extents(context.view.frozen, &xs, &ys, origin),
     }
 }
 
@@ -594,12 +644,14 @@ fn value_text(start: &BytesStart<'_>) -> String {
     }
 }
 
-fn parse_frozen(bytes: &[u8]) -> Result<Option<FrozenPanes>, RenderError> {
+fn parse_view_settings(bytes: &[u8]) -> Result<OdsView, RenderError> {
     let mut reader = quick_xml::Reader::from_reader(bytes);
     let mut name = String::new();
     let mut in_item = false;
     let mut columns = 0_u32;
     let mut rows = 0_u32;
+    let mut show_grid_lines = true;
+    let mut grid_colour = DEFAULT_GRID_COLOUR;
     loop {
         match reader.read_event() {
             Ok(Event::Start(start)) if xml::local_name(start.name().as_ref()) == b"config-item" => {
@@ -607,14 +659,15 @@ fn parse_frozen(bytes: &[u8]) -> Result<Option<FrozenPanes>, RenderError> {
                 in_item = true;
             }
             Ok(Event::Text(text)) if in_item => {
-                let value = text
-                    .decode()
-                    .ok()
-                    .and_then(|value| value.parse::<u32>().ok())
-                    .unwrap_or(0);
+                let decoded = text.decode().unwrap_or_default();
+                let value = decoded.parse::<u32>().unwrap_or(0);
                 match name.as_str() {
                     "HorizontalSplitPosition" | "SplitPositionHorizontal" => columns = value,
                     "VerticalSplitPosition" | "SplitPositionVertical" => rows = value,
+                    "ShowGrid" => {
+                        show_grid_lines = decoded != "0" && !decoded.eq_ignore_ascii_case("false")
+                    }
+                    "GridColor" => grid_colour = ods_grid_colour(value),
                     _ => {}
                 }
             }
@@ -636,7 +689,25 @@ fn parse_frozen(bytes: &[u8]) -> Result<Option<FrozenPanes>, RenderError> {
             Err(_) => return Err(RenderError::malformed("ODS view settings are malformed")),
         }
     }
-    Ok((columns > 0 || rows > 0).then_some(FrozenPanes { rows, columns }))
+    Ok(OdsView {
+        frozen: (columns > 0 || rows > 0).then_some(FrozenPanes {
+            rows,
+            columns,
+            width: 0.0,
+            height: 0.0,
+        }),
+        show_grid_lines,
+        grid_colour,
+    })
+}
+
+fn ods_grid_colour(value: u32) -> Colour {
+    Colour {
+        r: u8::try_from((value >> 16) & 0xff).unwrap_or(0),
+        g: u8::try_from((value >> 8) & 0xff).unwrap_or(0),
+        b: u8::try_from(value & 0xff).unwrap_or(0),
+        a: 255,
+    }
 }
 
 fn check_repeat(value: u32, limit: u64) -> Result<(), RenderError> {
@@ -698,5 +769,31 @@ mod tests {
     #[test]
     fn odf_lengths_are_converted_to_css_pixels() {
         assert!((length("2.54cm").unwrap_or_default() - 96.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn ods_view_settings_control_the_same_grid_and_frozen_metadata() {
+        let settings = br#"<settings><config-item config:name="ShowGrid">false</config-item><config-item config:name="GridColor">16711680</config-item><config-item config:name="HorizontalSplitPosition">2</config-item><config-item config:name="VerticalSplitPosition">3</config-item></settings>"#;
+        let view = parse_view_settings(settings)
+            .unwrap_or_else(|error| panic!("the view settings should parse: {error}"));
+        assert!(!view.show_grid_lines);
+        assert_eq!(
+            view.grid_colour,
+            Colour {
+                r: 255,
+                g: 0,
+                b: 0,
+                a: 255
+            }
+        );
+        assert_eq!(
+            view.frozen,
+            Some(FrozenPanes {
+                rows: 3,
+                columns: 2,
+                width: 0.0,
+                height: 0.0,
+            })
+        );
     }
 }

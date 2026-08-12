@@ -106,11 +106,13 @@ def xlsx_parts(rows: int = 3, columns: int = 3, features: bool = False) -> dict[
 package("basic.xlsx", xlsx_parts())
 package("features.xlsm", xlsx_parts(features=True))
 package("wide.xlsx", xlsx_parts(350, 400))
+package("frozen-scroll.xlsx", xlsx_parts(120, 80))
 
 package("basic.ods", {
     "mimetype": "application/vnd.oasis.opendocument.spreadsheet",
     "META-INF/manifest.xml": odf_manifest("application/vnd.oasis.opendocument.spreadsheet"),
     "styles.xml": ODF_STYLES,
+    "settings.xml": '<office:document-settings xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:config="urn:oasis:names:tc:opendocument:xmlns:config:1.0"><office:settings><config:config-item config:name="ShowGrid" config:type="boolean">true</config:config-item><config:config-item config:name="HorizontalSplitPosition" config:type="int">1</config:config-item><config:config-item config:name="VerticalSplitPosition" config:type="int">1</config:config-item></office:settings></office:document-settings>',
     "content.xml": '<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" office:version="1.2"><office:body><office:spreadsheet><table:table table:name="Sheet 1"><table:table-row><table:table-cell table:number-columns-repeated="2" office:value-type="string"><text:p>Hello</text:p></table:table-cell></table:table-row></table:table></office:spreadsheet></office:body></office:document-content>',
 })
 package("repeat-bomb.ods", {

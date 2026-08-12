@@ -2,6 +2,9 @@ use crate::container::{resolve_relationship, xml, zip::Archive};
 use crate::model::*;
 use crate::sheet::numfmt;
 use crate::sheet::styles::{self, CellStyle, Styles};
+use crate::sheet::{
+    DEFAULT_GRID_COLOUR, frozen_with_extents, paint_gridlines, paint_sheet_headers, sheet_origin,
+};
 use crate::text::{TextStyle, measure, shape};
 use crate::{Format, Options, RenderError};
 use quick_xml::events::{BytesStart, Event};
@@ -252,6 +255,8 @@ fn parse_sheet(
     let mut default_row_height = 20.0_f32;
     let mut merges = Vec::new();
     let mut frozen = None;
+    let mut show_grid_lines = true;
+    let mut grid_colour = DEFAULT_GRID_COLOUR;
     let mut unrendered = Vec::new();
     let mut current: Option<Cell> = None;
     let mut kind = String::new();
@@ -264,6 +269,18 @@ fn parse_sheet(
     let mut conditional = 0_u32;
     loop {
         match reader.read_event() {
+            Ok(Event::Empty(s)) | Ok(Event::Start(s))
+                if xml::local_name(s.name().as_ref()) == b"sheetView" =>
+            {
+                show_grid_lines = attr(&s, b"showGridLines")
+                    .map(|value| value != "0" && !value.eq_ignore_ascii_case("false"))
+                    .unwrap_or(true);
+                grid_colour = attr(&s, b"colorId")
+                    .or_else(|| attr(&s, b"gridColor"))
+                    .and_then(|value| value.parse::<u32>().ok())
+                    .and_then(crate::sheet::styles::indexed_colour)
+                    .unwrap_or(DEFAULT_GRID_COLOUR);
+            }
             Ok(Event::Empty(s)) | Ok(Event::Start(s))
                 if xml::local_name(s.name().as_ref()) == b"sheetFormatPr" =>
             {
@@ -396,6 +413,8 @@ fn parse_sheet(
                     rows: attr(&s, b"ySplit")
                         .and_then(|v| v.parse().ok())
                         .unwrap_or(0),
+                    width: 0.0,
+                    height: 0.0,
                 });
             }
             Ok(Event::Start(s))
@@ -458,6 +477,7 @@ fn parse_sheet(
         .collect::<Vec<_>>();
     let xs = prefix(&cols);
     let ys = prefix(&rows);
+    let origin = sheet_origin(options.sheet_headers);
     let merge_covered: BTreeSet<(u32, u32)> = merges
         .iter()
         .flat_map(|(a, b)| {
@@ -467,6 +487,9 @@ fn parse_sheet(
         })
         .collect();
     let mut items = Vec::new();
+    if show_grid_lines {
+        paint_gridlines(&mut items, &xs, &ys, origin, grid_colour, sheet);
+    }
     for cell in cells {
         if merge_covered.contains(&(cell.row, cell.column)) {
             continue;
@@ -475,10 +498,10 @@ fn parse_sheet(
         if let Some((_, b)) = merges.iter().find(|(a, _)| *a == (cell.row, cell.column)) {
             end = *b;
         }
-        let x = xs[cell.column as usize];
-        let y = ys[cell.row as usize];
-        let width = xs[end.1 as usize + 1] - x;
-        let height = ys[end.0 as usize + 1] - y;
+        let x = origin.x + xs[cell.column as usize];
+        let y = origin.y + ys[cell.row as usize];
+        let width = xs[end.1 as usize + 1] - xs[cell.column as usize];
+        let height = ys[end.0 as usize + 1] - ys[cell.row as usize];
         let source = SourceRef::Cell {
             sheet,
             row: cell.row,
@@ -605,11 +628,15 @@ fn parse_sheet(
             }
         }
     }
+    if options.sheet_headers {
+        paint_sheet_headers(&mut items, &xs, &ys, sheet);
+    }
+    let frozen = frozen_with_extents(frozen, &xs, &ys, origin);
     Ok((
         Page {
             size: Size {
-                width: *xs.last().unwrap_or(&1.0),
-                height: *ys.last().unwrap_or(&1.0),
+                width: origin.x + *xs.last().unwrap_or(&1.0),
+                height: origin.y + *ys.last().unwrap_or(&1.0),
             },
             label: None,
             items,
@@ -858,7 +885,19 @@ fn dedupe_unrendered(values: &mut Vec<Unrendered>) {
 
 #[cfg(test)]
 mod tests {
-    use super::cell_value;
+    use super::{cell_value, parse_sheet};
+    use crate::Options;
+    use crate::model::{Colour, Item};
+    use crate::sheet::styles::{Styles, parse};
+
+    fn one_cell(sheet_view: &str, styles: &Styles) -> crate::model::Page {
+        let xml = format!(
+            "<worksheet><sheetViews>{sheet_view}</sheetViews><sheetData><row r=\"1\"><c r=\"A1\"></c></row></sheetData></worksheet>"
+        );
+        parse_sheet(xml.as_bytes(), 0, &[], styles, false, &Options::default())
+            .unwrap_or_else(|error| panic!("the worksheet should parse: {error}"))
+            .0
+    }
 
     #[test]
     fn general_numbers_are_formatted_instead_of_echoing_xml_lexemes() {
@@ -885,5 +924,44 @@ mod tests {
         )
         .unwrap_or_else(|error| panic!("the shared string table is valid: {error}"));
         assert_eq!(values, ["<1yr", ">9yrs"]);
+    }
+
+    #[test]
+    fn xlsx_gridlines_default_on_and_honour_visibility_and_colour() {
+        let default = one_cell("<sheetView/>", &Styles::default());
+        assert_eq!(default.items.len(), 4, "one cell has four grid edges");
+
+        let hidden = one_cell("<sheetView showGridLines=\"false\"/>", &Styles::default());
+        assert!(hidden.items.is_empty());
+
+        let red = one_cell("<sheetView colorId=\"2\"/>", &Styles::default());
+        assert!(red.items.iter().all(|item| {
+            matches!(item, Item::Path(path) if path.stroke.as_ref().is_some_and(|stroke| stroke.paint.colour == Colour { r: 255, g: 0, b: 0, a: 255 }))
+        }));
+    }
+
+    #[test]
+    fn explicit_cell_borders_are_painted_after_gridlines() {
+        let styles = parse(
+            br#"<styleSheet><fonts count="1"><font/></fonts><fills count="1"><fill/></fills><borders count="1"><border><left style="thick"><color rgb="FF0066CC"/></left></border></borders><cellXfs count="1"><xf borderId="0" applyBorder="1"/></cellXfs></styleSheet>"#,
+        )
+        .unwrap_or_else(|error| panic!("the style table should parse: {error}"));
+        let page = one_cell("<sheetView/>", &styles);
+        let Some(Item::Path(last)) = page.items.last() else {
+            panic!("the last item should be the explicit cell border");
+        };
+        let Some(stroke) = last.stroke.as_ref() else {
+            panic!("the border should have a stroke");
+        };
+        assert_eq!(stroke.width, 3.0);
+        assert_eq!(
+            stroke.paint.colour,
+            Colour {
+                r: 0,
+                g: 102,
+                b: 204,
+                a: 255
+            }
+        );
     }
 }

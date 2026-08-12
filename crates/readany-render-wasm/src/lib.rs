@@ -15,6 +15,8 @@ struct WasmOptions {
     filename: Option<String>,
     strict: Option<bool>,
     only: Option<WasmPageRange>,
+    #[serde(rename = "sheetHeaders")]
+    sheet_headers: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -148,6 +150,7 @@ fn render_native(
                 last: range.last,
             }),
             strict: js_options.strict.unwrap_or(false),
+            sheet_headers: js_options.sheet_headers.unwrap_or(false),
             ..Options::default()
         };
         readany_render::render(bytes, &options).map_err(js_error)

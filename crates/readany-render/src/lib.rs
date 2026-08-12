@@ -37,6 +37,8 @@ pub struct Options<'a> {
     pub fonts: FontSource<'a>,
     pub only: Option<PageRange>,
     pub strict: bool,
+    /// Includes spreadsheet row and column labels in the display list.
+    pub sheet_headers: bool,
 }
 
 /// Turns bytes into a deterministic display list. Content is never fetched.

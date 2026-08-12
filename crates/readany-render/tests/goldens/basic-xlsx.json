@@ -8,6 +8,326 @@
       "label": "Data",
       "items": [
         {
+          "kind": "Path",
+          "value": {
+            "path": {
+              "commands": [
+                {
+                  "Move": {
+                    "x": 0.0,
+                    "y": 0.0
+                  }
+                },
+                {
+                  "Line": {
+                    "x": 0.0,
+                    "y": 60.0
+                  }
+                }
+              ]
+            },
+            "fill": null,
+            "stroke": {
+              "paint": {
+                "colour": {
+                  "r": 217,
+                  "g": 217,
+                  "b": 217,
+                  "a": 255
+                }
+              },
+              "width": 1.0,
+              "dash": []
+            },
+            "source": {
+              "kind": "Cell",
+              "sheet": 0,
+              "row": 0,
+              "column": 0
+            }
+          }
+        },
+        {
+          "kind": "Path",
+          "value": {
+            "path": {
+              "commands": [
+                {
+                  "Move": {
+                    "x": 89.0,
+                    "y": 0.0
+                  }
+                },
+                {
+                  "Line": {
+                    "x": 89.0,
+                    "y": 60.0
+                  }
+                }
+              ]
+            },
+            "fill": null,
+            "stroke": {
+              "paint": {
+                "colour": {
+                  "r": 217,
+                  "g": 217,
+                  "b": 217,
+                  "a": 255
+                }
+              },
+              "width": 1.0,
+              "dash": []
+            },
+            "source": {
+              "kind": "Cell",
+              "sheet": 0,
+              "row": 0,
+              "column": 0
+            }
+          }
+        },
+        {
+          "kind": "Path",
+          "value": {
+            "path": {
+              "commands": [
+                {
+                  "Move": {
+                    "x": 153.0,
+                    "y": 0.0
+                  }
+                },
+                {
+                  "Line": {
+                    "x": 153.0,
+                    "y": 60.0
+                  }
+                }
+              ]
+            },
+            "fill": null,
+            "stroke": {
+              "paint": {
+                "colour": {
+                  "r": 217,
+                  "g": 217,
+                  "b": 217,
+                  "a": 255
+                }
+              },
+              "width": 1.0,
+              "dash": []
+            },
+            "source": {
+              "kind": "Cell",
+              "sheet": 0,
+              "row": 0,
+              "column": 1
+            }
+          }
+        },
+        {
+          "kind": "Path",
+          "value": {
+            "path": {
+              "commands": [
+                {
+                  "Move": {
+                    "x": 217.0,
+                    "y": 0.0
+                  }
+                },
+                {
+                  "Line": {
+                    "x": 217.0,
+                    "y": 60.0
+                  }
+                }
+              ]
+            },
+            "fill": null,
+            "stroke": {
+              "paint": {
+                "colour": {
+                  "r": 217,
+                  "g": 217,
+                  "b": 217,
+                  "a": 255
+                }
+              },
+              "width": 1.0,
+              "dash": []
+            },
+            "source": {
+              "kind": "Cell",
+              "sheet": 0,
+              "row": 0,
+              "column": 2
+            }
+          }
+        },
+        {
+          "kind": "Path",
+          "value": {
+            "path": {
+              "commands": [
+                {
+                  "Move": {
+                    "x": 0.0,
+                    "y": 0.0
+                  }
+                },
+                {
+                  "Line": {
+                    "x": 217.0,
+                    "y": 0.0
+                  }
+                }
+              ]
+            },
+            "fill": null,
+            "stroke": {
+              "paint": {
+                "colour": {
+                  "r": 217,
+                  "g": 217,
+                  "b": 217,
+                  "a": 255
+                }
+              },
+              "width": 1.0,
+              "dash": []
+            },
+            "source": {
+              "kind": "Cell",
+              "sheet": 0,
+              "row": 0,
+              "column": 0
+            }
+          }
+        },
+        {
+          "kind": "Path",
+          "value": {
+            "path": {
+              "commands": [
+                {
+                  "Move": {
+                    "x": 0.0,
+                    "y": 20.0
+                  }
+                },
+                {
+                  "Line": {
+                    "x": 217.0,
+                    "y": 20.0
+                  }
+                }
+              ]
+            },
+            "fill": null,
+            "stroke": {
+              "paint": {
+                "colour": {
+                  "r": 217,
+                  "g": 217,
+                  "b": 217,
+                  "a": 255
+                }
+              },
+              "width": 1.0,
+              "dash": []
+            },
+            "source": {
+              "kind": "Cell",
+              "sheet": 0,
+              "row": 0,
+              "column": 0
+            }
+          }
+        },
+        {
+          "kind": "Path",
+          "value": {
+            "path": {
+              "commands": [
+                {
+                  "Move": {
+                    "x": 0.0,
+                    "y": 40.0
+                  }
+                },
+                {
+                  "Line": {
+                    "x": 217.0,
+                    "y": 40.0
+                  }
+                }
+              ]
+            },
+            "fill": null,
+            "stroke": {
+              "paint": {
+                "colour": {
+                  "r": 217,
+                  "g": 217,
+                  "b": 217,
+                  "a": 255
+                }
+              },
+              "width": 1.0,
+              "dash": []
+            },
+            "source": {
+              "kind": "Cell",
+              "sheet": 0,
+              "row": 1,
+              "column": 0
+            }
+          }
+        },
+        {
+          "kind": "Path",
+          "value": {
+            "path": {
+              "commands": [
+                {
+                  "Move": {
+                    "x": 0.0,
+                    "y": 60.0
+                  }
+                },
+                {
+                  "Line": {
+                    "x": 217.0,
+                    "y": 60.0
+                  }
+                }
+              ]
+            },
+            "fill": null,
+            "stroke": {
+              "paint": {
+                "colour": {
+                  "r": 217,
+                  "g": 217,
+                  "b": 217,
+                  "a": 255
+                }
+              },
+              "width": 1.0,
+              "dash": []
+            },
+            "source": {
+              "kind": "Cell",
+              "sheet": 0,
+              "row": 2,
+              "column": 0
+            }
+          }
+        },
+        {
           "kind": "Group",
           "value": {
             "items": [
@@ -770,7 +1090,9 @@
       "source": null,
       "frozen": {
         "rows": 1,
-        "columns": 1
+        "columns": 1,
+        "width": 89.0,
+        "height": 20.0
       }
     }
   ],

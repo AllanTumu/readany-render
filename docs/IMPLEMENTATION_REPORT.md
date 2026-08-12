@@ -13,8 +13,8 @@ page, and JPEG honours EXIF orientation.
 
 | Family | Status | Current visual evidence |
 | --- | --- | --- |
-| XLSX / XLSM | Natural-sheet display list plus bounded viewport raster/item APIs; cached values, geometry, merges, frozen panes, explicit styles, number formats, and omissions covered | Exhaustive exact cell text 1.000000 on both real sheets; text fidelity 0.978372 and 0.967207 across five distributed viewports |
-| ODS | Natural-sheet display list and viewport APIs; ODF styles, repeats, spans, frozen panes, and explicit cell paint covered | Parser/golden/raster tests; no honest real ODS visual score currently claimed |
+| XLSX / XLSM | Natural-sheet display list plus bounded viewport raster/item APIs; cached values, geometry, merges, gridline view settings, opt-in headers, frozen-pane pixel extents, explicit styles, number formats, and omissions covered | Exhaustive exact cell text 1.000000 on both real sheets; text fidelity 0.978372 and 0.967207 across five distributed viewports |
+| ODS | Natural-sheet display list and viewport APIs; ODF styles, repeats, spans, gridline settings, opt-in headers, frozen-pane pixel extents, and explicit cell paint covered | Parser/golden/raster tests; no honest real ODS visual score currently claimed |
 | CSV / TSV | Encoding and separator sniffing plus RFC 4180 quoting | Parser/raster tests |
 | DOCX | Style cascade, shaping, pagination, lists, table paint, repeating parts, and images | Text fidelity 0.853182; mean / p95 box error 2.24 / 6.36 px |
 | ODT | Named/automatic styles, page geometry, lists, spans, and images | Text fidelity 0.607502; mean / p95 box error 6.90 / 12.35 px |
@@ -37,6 +37,14 @@ exposes `Document.pageInfo`, `Document.itemsInRect`,
 `Document.renderRectRgba`, and `Document.renderRectToCanvas`. A consumer no
 longer serializes a hundreds-of-megabytes display list or allocates the full
 natural sheet merely to draw the visible pane.
+
+XLSX and ODS gridlines default on and honour file visibility and colour settings.
+They are emitted before fills and explicit borders, so document paint wins at a
+shared edge. `Options::sheet_headers` adds row and column furniture without
+changing the default display list; the bijective label sequence is exhaustively
+pinned from A through ZZZ. Frozen row/column counts now carry their clamped pixel
+width and height, which lets a viewport repaint the body and each frozen axis
+independently.
 
 The full Endo and generated-wide sheet rasters still correctly fail above the
 100-million-pixel safety ceiling. Their 1,200 x 800 viewports succeed.
