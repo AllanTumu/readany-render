@@ -249,6 +249,7 @@ fn parse_pages(
                     items: std::mem::take(&mut items),
                     source: None,
                     frozen: None,
+                    grid: None,
                 });
                 in_page = false;
             }

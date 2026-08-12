@@ -27,6 +27,28 @@ pub(crate) fn sheet_origin(headers: bool) -> Point {
     }
 }
 
+pub(crate) fn sheet_grid(xs: &[f32], ys: &[f32], origin: Point) -> SheetGrid {
+    let columns = xs
+        .windows(2)
+        .enumerate()
+        .map(|(index, span)| ColumnSpan {
+            index: u32::try_from(index).unwrap_or(u32::MAX),
+            x: origin.x + span[0],
+            width: span[1] - span[0],
+        })
+        .collect();
+    let rows = ys
+        .windows(2)
+        .enumerate()
+        .map(|(index, span)| RowSpan {
+            index: u32::try_from(index).unwrap_or(u32::MAX),
+            y: origin.y + span[0],
+            height: span[1] - span[0],
+        })
+        .collect();
+    SheetGrid { columns, rows }
+}
+
 pub(crate) fn paint_gridlines(
     items: &mut Vec<Item>,
     xs: &[f32],

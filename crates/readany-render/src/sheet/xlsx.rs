@@ -3,7 +3,8 @@ use crate::model::*;
 use crate::sheet::numfmt;
 use crate::sheet::styles::{self, CellStyle, Styles};
 use crate::sheet::{
-    DEFAULT_GRID_COLOUR, frozen_with_extents, paint_gridlines, paint_sheet_headers, sheet_origin,
+    DEFAULT_GRID_COLOUR, frozen_with_extents, paint_gridlines, paint_sheet_headers, sheet_grid,
+    sheet_origin,
 };
 use crate::text::{TextStyle, measure, shape};
 use crate::{Format, Options, RenderError};
@@ -632,6 +633,7 @@ fn parse_sheet(
         paint_sheet_headers(&mut items, &xs, &ys, sheet);
     }
     let frozen = frozen_with_extents(frozen, &xs, &ys, origin);
+    let grid = Some(sheet_grid(&xs, &ys, origin));
     Ok((
         Page {
             size: Size {
@@ -642,6 +644,7 @@ fn parse_sheet(
             items,
             source: None,
             frozen,
+            grid,
         },
         unrendered,
     ))

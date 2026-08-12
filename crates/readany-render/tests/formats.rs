@@ -1,6 +1,6 @@
 use readany_render::{
-    Format, Item, Limits, Options, Rect, RenderErrorCode, SvgOptions, Unrendered, items_in_rect,
-    rasterise, rasterise_rect, render, to_svg,
+    Document, Format, Item, Limits, Options, Rect, RenderErrorCode, SvgOptions, Unrendered,
+    items_in_rect, rasterise, rasterise_rect, render, to_svg,
 };
 use std::path::PathBuf;
 
@@ -767,4 +767,22 @@ fn basic_xlsx_display_list_matches_the_committed_readable_golden() {
         include_str!("goldens/basic-xlsx.json"),
         "display-list changes must be reviewed as a golden diff"
     );
+}
+
+#[test]
+fn a_retained_document_without_overrides_is_the_exact_committed_golden() {
+    let bytes = include_bytes!("../../../fixtures/basic.xlsx");
+    let rendered = render(
+        bytes,
+        &Options {
+            filename: Some("fixtures/basic.xlsx"),
+            ..Options::default()
+        },
+    )
+    .unwrap_or_else(|error| panic!("the generated workbook renders: {error}"));
+    let document = Document::new(rendered);
+    let actual = serde_json::to_string_pretty(document.rendered())
+        .map(|json| format!("{json}\n"))
+        .unwrap_or_else(|error| panic!("the retained display list serialises: {error}"));
+    assert_eq!(actual, include_str!("goldens/basic-xlsx.json"));
 }

@@ -3,6 +3,9 @@ export interface Size { width: number; height: number }
 export interface Rect extends Point, Size {}
 export interface Colour { r: number; g: number; b: number; a: number }
 export interface FrozenPanes { rows: number; columns: number; width: number; height: number }
+export interface ColumnSpan { index: number; x: number; width: number }
+export interface RowSpan { index: number; y: number; height: number }
+export interface SheetGrid { columns: ColumnSpan[]; rows: RowSpan[] }
 export interface PositionedGlyph {
   glyph_id: number;
   x_advance: number;
@@ -50,7 +53,13 @@ export interface Page {
   source: SourceRef | null;
   frozen: FrozenPanes | null;
 }
-export type PageInfo = Omit<Page, "items">;
+export interface PageInfo {
+  size: Size;
+  label: string | null;
+  source: SourceRef | null;
+  frozen: FrozenPanes | null;
+  grid: SheetGrid | null;
+}
 export type Format = "csv" | "tsv" | "xlsx" | "xlsm" | "ods" | "docx" | "odt" | "rtf" | "pptx" | "odp" | "pdf" | "png" | "jpeg" | "gif" | "bmp" | "webp" | "heic";
 export type Unrendered =
   | { type: "Chart"; page: number; kind: string }
@@ -87,6 +96,9 @@ export class Document {
   readonly meta: Meta;
   pageInfo(page: number): PageInfo;
   itemsInRect(page: number, rect: Rect): Item[];
+  setColumnWidth(page: number, column: number, widthPx: number): void;
+  autoFitColumn(page: number, column: number): number;
+  resetColumnWidths(page: number): void;
   renderRectRgba(page: number, rect: Rect, scale: number): Uint8Array;
   renderRectToCanvas(page: number, rect: Rect, canvas: HTMLCanvasElement, options?: RasterOptions): void;
 }

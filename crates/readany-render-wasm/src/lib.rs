@@ -41,14 +41,14 @@ pub fn render_document(bytes: &[u8], options: JsValue) -> Result<JsValue, JsValu
 /// items or pixels instead of materialising hundreds of megabytes of objects.
 #[wasm_bindgen]
 pub struct Document {
-    rendered: readany_render::Rendered,
+    document: readany_render::Document,
 }
 
 #[wasm_bindgen(js_name = open)]
 pub fn open_document(bytes: &[u8], options: JsValue) -> Result<Document, JsValue> {
     let js_options = serde_wasm_bindgen::from_value::<WasmOptions>(options).unwrap_or_default();
     Ok(Document {
-        rendered: render_native(bytes, &js_options)?,
+        document: readany_render::Document::new(render_native(bytes, &js_options)?),
     })
 }
 
@@ -58,48 +58,50 @@ struct PageInfo<'a> {
     label: &'a Option<String>,
     source: &'a Option<readany_render::SourceRef>,
     frozen: &'a Option<readany_render::FrozenPanes>,
+    grid: &'a Option<readany_render::SheetGrid>,
 }
 
 #[wasm_bindgen]
 impl Document {
     #[wasm_bindgen(getter, js_name = pageCount)]
     pub fn page_count(&self) -> usize {
-        self.rendered.pages.len()
+        self.document.rendered().pages.len()
     }
 
     #[wasm_bindgen(getter)]
     pub fn format(&self) -> Result<JsValue, JsValue> {
-        serde_wasm_bindgen::to_value(&self.rendered.format)
+        serde_wasm_bindgen::to_value(&self.document.rendered().format)
             .map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
     #[wasm_bindgen(getter)]
     pub fn unrendered(&self) -> Result<JsValue, JsValue> {
-        serde_wasm_bindgen::to_value(&self.rendered.unrendered)
+        serde_wasm_bindgen::to_value(&self.document.rendered().unrendered)
             .map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
     #[wasm_bindgen(getter)]
     pub fn meta(&self) -> Result<JsValue, JsValue> {
-        serde_wasm_bindgen::to_value(&self.rendered.meta)
+        serde_wasm_bindgen::to_value(&self.document.rendered().meta)
             .map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
     #[wasm_bindgen(js_name = pageInfo)]
     pub fn page_info(&self, page: usize) -> Result<JsValue, JsValue> {
-        let page = page_at(&self.rendered, page)?;
+        let page = page_at(self.document.rendered(), page)?;
         serde_wasm_bindgen::to_value(&PageInfo {
             size: page.size,
             label: &page.label,
             source: &page.source,
             frozen: &page.frozen,
+            grid: &page.grid,
         })
         .map_err(|error| JsValue::from_str(&error.to_string()))
     }
 
     #[wasm_bindgen(js_name = itemsInRect)]
     pub fn items_in_rect(&self, page: usize, rect: JsValue) -> Result<JsValue, JsValue> {
-        let page = page_at(&self.rendered, page)?;
+        let page = page_at(self.document.rendered(), page)?;
         let rect = js_rect(rect)?;
         let items = readany_render::items_in_rect(page, rect).map_err(js_error)?;
         serde_wasm_bindgen::to_value(&items).map_err(|error| JsValue::from_str(&error.to_string()))
@@ -112,7 +114,7 @@ impl Document {
         rect: JsValue,
         scale: f32,
     ) -> Result<Vec<u8>, JsValue> {
-        let page = page_at(&self.rendered, page)?;
+        let page = page_at(self.document.rendered(), page)?;
         Ok(readany_render::rasterise_rect(page, js_rect(rect)?, scale)
             .map_err(js_error)?
             .data)
@@ -126,8 +128,32 @@ impl Document {
         canvas: web_sys::HtmlCanvasElement,
         options: JsValue,
     ) -> Result<(), JsValue> {
-        let page = page_at(&self.rendered, page)?;
+        let page = page_at(self.document.rendered(), page)?;
         paint_rect_to_canvas(page, js_rect(rect)?, canvas, options)
+    }
+
+    #[wasm_bindgen(js_name = setColumnWidth)]
+    pub fn set_column_width(
+        &mut self,
+        page: usize,
+        column: u32,
+        width_px: f32,
+    ) -> Result<(), JsValue> {
+        self.document
+            .set_column_width(page, column, width_px)
+            .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = autoFitColumn)]
+    pub fn auto_fit_column(&mut self, page: usize, column: u32) -> Result<f32, JsValue> {
+        self.document
+            .auto_fit_column(page, column)
+            .map_err(js_error)
+    }
+
+    #[wasm_bindgen(js_name = resetColumnWidths)]
+    pub fn reset_column_widths(&mut self, page: usize) -> Result<(), JsValue> {
+        self.document.reset_column_widths(page).map_err(js_error)
     }
 }
 

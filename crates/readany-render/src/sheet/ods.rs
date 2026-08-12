@@ -4,7 +4,8 @@ use crate::sheet::styles::{
     AlignmentStyle, BorderSide, BorderStyle, CellStyle, FillStyle, FontStyle,
 };
 use crate::sheet::{
-    DEFAULT_GRID_COLOUR, frozen_with_extents, paint_gridlines, paint_sheet_headers, sheet_origin,
+    DEFAULT_GRID_COLOUR, frozen_with_extents, paint_gridlines, paint_sheet_headers, sheet_grid,
+    sheet_origin,
 };
 use crate::text::{TextStyle, measure, shape};
 use crate::{Format, Options, RenderError};
@@ -488,6 +489,7 @@ fn make_page(
         items,
         source: None,
         frozen: frozen_with_extents(context.view.frozen, &xs, &ys, origin),
+        grid: Some(sheet_grid(&xs, &ys, origin)),
     }
 }
 

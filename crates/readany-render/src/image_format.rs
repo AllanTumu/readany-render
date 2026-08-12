@@ -56,6 +56,7 @@ pub(crate) fn render(
             })],
             source: None,
             frozen: None,
+            grid: None,
         }],
         format,
         unrendered: Vec::new(),

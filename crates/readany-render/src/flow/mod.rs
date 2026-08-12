@@ -205,6 +205,7 @@ fn new_page(size: Size, number: usize) -> Page {
         items: Vec::new(),
         source: None,
         frozen: None,
+        grid: None,
     }
 }
 

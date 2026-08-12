@@ -1,4 +1,4 @@
-use readany_render::{Options, Rect, rasterise_rect, render};
+use readany_render::{Document, Options, Rect, rasterise_rect, render};
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -47,9 +47,21 @@ fn motivating_real_workbook_meets_the_display_list_and_viewport_budgets() {
         "real workbook took {} ms, over the 500 ms budget",
         render_elapsed.as_millis()
     );
+    let mut document = Document::new(rendered);
+    let relayout_started = Instant::now();
+    document
+        .set_column_width(0, 2, 180.0)
+        .unwrap_or_else(|error| panic!("a real workbook column resizes: {error}"));
+    let relayout_elapsed = relayout_started.elapsed();
+    assert!(
+        relayout_elapsed < render_elapsed,
+        "single-page relayout took {} ms and was not cheaper than the {} ms parse",
+        relayout_elapsed.as_millis(),
+        render_elapsed.as_millis()
+    );
     let viewport_started = Instant::now();
     let viewport = rasterise_rect(
-        &rendered.pages[0],
+        &document.rendered().pages[0],
         Rect {
             x: 0.0,
             y: 0.0,
@@ -67,8 +79,9 @@ fn motivating_real_workbook_meets_the_display_list_and_viewport_budgets() {
         viewport_elapsed.as_millis()
     );
     eprintln!(
-        "real_workbook_ms={} real_viewport_ms={}",
+        "real_workbook_ms={} real_relayout_ms={} real_viewport_ms={}",
         render_elapsed.as_millis(),
+        relayout_elapsed.as_millis(),
         viewport_elapsed.as_millis()
     );
 }

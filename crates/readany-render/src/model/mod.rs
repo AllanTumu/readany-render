@@ -153,6 +153,26 @@ pub struct FrozenPanes {
     pub height: f32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ColumnSpan {
+    pub index: u32,
+    pub x: f32,
+    pub width: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct RowSpan {
+    pub index: u32,
+    pub y: f32,
+    pub height: f32,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SheetGrid {
+    pub columns: Vec<ColumnSpan>,
+    pub rows: Vec<RowSpan>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind")]
 #[non_exhaustive]
@@ -180,6 +200,11 @@ pub struct Page {
     pub items: Vec<Item>,
     pub source: Option<SourceRef>,
     pub frozen: Option<FrozenPanes>,
+    /// Interactive sheet geometry is returned by retained `pageInfo`; keeping
+    /// it out of canonical display-list JSON preserves the public identity of
+    /// a default render and every existing golden byte-for-byte.
+    #[serde(skip)]
+    pub grid: Option<SheetGrid>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

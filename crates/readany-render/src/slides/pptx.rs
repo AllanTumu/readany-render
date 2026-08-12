@@ -460,6 +460,7 @@ fn parse_slide(
             items,
             source: None,
             frozen: None,
+            grid: None,
         },
         unsupported_media
             .into_iter()

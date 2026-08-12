@@ -1,5 +1,5 @@
 use crate::model::*;
-use crate::sheet::{paint_sheet_headers, sheet_origin};
+use crate::sheet::{paint_sheet_headers, sheet_grid, sheet_origin};
 use crate::text::{TextStyle, measure, shape};
 use crate::{Format, Options, RenderError, RenderErrorCode};
 use encoding_rs::{UTF_16BE, UTF_16LE, WINDOWS_1252};
@@ -103,6 +103,7 @@ pub(crate) fn render(
             items,
             source: None,
             frozen: None,
+            grid: Some(sheet_grid(&xs, &ys, origin)),
         }],
         format,
         unrendered: Vec::new(),

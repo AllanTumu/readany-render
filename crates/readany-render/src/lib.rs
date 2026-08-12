@@ -4,6 +4,7 @@
 //! Deterministic, inspectable display lists for common document formats.
 
 mod container;
+mod document;
 mod error;
 mod flow;
 mod image_format;
@@ -15,6 +16,7 @@ mod slides;
 mod sniff;
 mod text;
 
+pub use document::{AUTO_FIT_PADDING_PX, Document, MAX_COLUMN_WIDTH_PX, MIN_COLUMN_WIDTH_PX};
 pub use error::{RenderError, RenderErrorCode};
 pub use limits::Limits;
 pub use model::*;

@@ -891,6 +891,7 @@ mod tests {
             })],
             source: None,
             frozen: None,
+            grid: None,
         };
 
         let pixmap = rasterise(&page, 1.0)
