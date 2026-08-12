@@ -247,29 +247,29 @@
   },
   "uk-ipo-one-way-nda.odt": {
     "pixel": {
-      "aligned_ssim": 0.7106588809434033,
+      "aligned_ssim": 0.745548544889993,
       "offset_x": 0.0,
-      "offset_y": 1.0,
-      "ink_density_ours": 0.0431466744125016,
+      "offset_y": -2.25,
+      "ink_density_ours": 0.05461297274079192,
       "ink_density_reference": 0.06737208157351103
     },
     "text": {
-      "ours": 876,
+      "ours": 1122,
       "reference": 1122,
-      "matched": 148,
+      "matched": 1076,
       "mismatched_sources": 0,
-      "exact_text": 0.14814814814814814,
-      "geometry": 0.008731601416716988,
-      "combined": 0.0012935705802543684,
-      "offset_x": 9.162781563721694,
-      "offset_y": -617.4796343500757,
-      "mean_error": 347.63734382691024,
-      "p95_error": 864.9575018322942
+      "exact_text": 0.9590017825311943,
+      "geometry": 0.11162834720112687,
+      "combined": 0.10705178394689172,
+      "offset_x": 27.09543824306453,
+      "offset_y": 28.764761138618308,
+      "mean_error": 79.30113209864744,
+      "p95_error": 452.09966454763406
     },
     "pagination": {
-      "ours": 3,
+      "ours": 2,
       "reference": 2,
-      "ratio": 0.6666666666666666
+      "ratio": 1.0
     }
   }
 }
