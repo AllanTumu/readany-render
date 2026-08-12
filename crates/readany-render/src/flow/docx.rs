@@ -421,6 +421,14 @@ fn parse_part(
             Ok(Event::Text(text)) if in_position_offset => {
                 position_text.push_str(&text.decode().unwrap_or_default());
             }
+            Ok(Event::GeneralRef(reference)) if in_text && !in_instruction => {
+                if let Some(run) = &mut current_run {
+                    run.text.push_str(&xml::decode_reference(&reference)?);
+                }
+            }
+            Ok(Event::GeneralRef(reference)) if in_position_offset => {
+                position_text.push_str(&xml::decode_reference(&reference)?);
+            }
             Ok(Event::End(end)) => match xml::local_name(end.name().as_ref()) {
                 b"p" if in_paragraph => {
                     if let Some(run) = current_run.take() {

@@ -13,21 +13,21 @@ page, and JPEG honours EXIF orientation.
 
 | Family | Status | Current visual evidence |
 | --- | --- | --- |
-| XLSX / XLSM | Natural-sheet display list plus bounded viewport raster/item APIs; cached values, geometry, merges, frozen panes, explicit styles, number formats, and omissions covered | Source-aware text fidelity 0.281341 and 0.308466 across four viewports each |
+| XLSX / XLSM | Natural-sheet display list plus bounded viewport raster/item APIs; cached values, geometry, merges, frozen panes, explicit styles, number formats, and omissions covered | Exhaustive exact cell text 1.000000 on both real sheets; text fidelity 0.978372 and 0.967207 across five distributed viewports |
 | ODS | Natural-sheet display list and viewport APIs; ODF styles, repeats, spans, frozen panes, and explicit cell paint covered | Parser/golden/raster tests; no honest real ODS visual score currently claimed |
 | CSV / TSV | Encoding and separator sniffing plus RFC 4180 quoting | Parser/raster tests |
 | DOCX | Style cascade, shaping, pagination, lists, table paint, repeating parts, and images | Text fidelity 0.853182; mean / p95 box error 2.24 / 6.36 px |
 | ODT | Named/automatic styles, page geometry, lists, spans, and images | Text fidelity 0.607502; mean / p95 box error 6.90 / 12.35 px |
-| RTF | Scoped token stream, destinations, codepages, Unicode fallback, and formatting | Text fidelity 0.559660; exact text 0.769231 |
+| RTF | Scoped token stream, destinations, codepages, Unicode fallback, and formatting | Text fidelity 0.717480; exact text 1.000000 |
 | PPTX | Relationships, layout/master placeholder geometry, shapes, connectors, autofit, and images | Text fidelity 0.682948; mean / p95 box error 4.61 / 5.48 px |
 | ODP | Masters, named styles, explicit geometry, shapes, autofit, and images | Text fidelity 0.715689; mean / p95 box error 4.05 / 4.97 px |
 | PDF / HEIC | Deliberate `DelegateToHost`; no misleading partial page | Official CFPB sample statement pins the PDF contract |
 | PNG / JPEG / GIF / BMP / WebP | Single inspectable image page with pixel ceiling and orientation | Photographed receipt pixel diagnostic is exact |
 
-The page-shaped text-fidelity mean is **0.683796**. The real spreadsheet mean is
-**0.294903**. Exact text coverage is **0.961005** for Endo and **0.801871** for
-the stress workbook; mean box errors are 24.11 and 22.21 px. See
-`docs/FIDELITY.md` for the scoring definition and every diagnostic.
+The page-shaped text-fidelity mean is **0.715360**. The real spreadsheet mean is
+**0.972789**. Exact cell text is **1.000000** for both Endo and OakPrism; sampled
+mean / p95 box errors are 0.26 / 0.27 px and 0.45 / 3.27 px. See
+`docs/FIDELITY.md` for the scoring definition and sampling boundary.
 
 ## Spreadsheet viewport path
 
@@ -66,7 +66,9 @@ parser regression.
 ## Fidelity harness corrections
 
 1. Release gating compares display-list words and boxes with LibreOffice PDF
-   bbox or HTML DOM boxes. Sheet matches include `SourceRef::Cell` provenance.
+   bbox or HTML DOM boxes. Spreadsheet exact text compares every non-empty cell
+   in the full sheets by `SourceRef::Cell`; geometry samples five distributed
+   viewports at both 96 and 192 dpi.
 2. A median registration offset is removed before local geometry drift is
    measured. CI prints source-aware largest drifts, mean error, and p95 error.
 3. Pixel SSIM searches plus or minus 3 px and reports both ink densities, but is
@@ -78,6 +80,9 @@ parser regression.
    workbook, a photographed receipt fixture, and an official public sample
    statement. The statement is used to verify deliberate PDF delegation rather
    than manufacturing a PDF fidelity score inside a non-PDF renderer.
+6. Spreadsheet publication additionally requires at least 99% exhaustive exact
+   cell text and p95 sampled geometry drift no greater than 4 px. This hard bar
+   runs even during an explicit baseline update.
 
 ## Incomplete-content evidence
 

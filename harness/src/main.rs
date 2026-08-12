@@ -7,7 +7,7 @@ use readany_render::{
     GlyphRun, Item, Options, Page, Rect, SourceRef, rasterise, rasterise_rect, render,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
@@ -29,22 +29,9 @@ const SHEET_CORPUS: &[(&str, &str)] = &[
     ),
 ];
 
-const SHEET_VIEWPORTS: &[Rect] = &[
-    Rect {
-        x: 0.0,
-        y: 0.0,
-        width: 1_200.0,
-        height: 800.0,
-    },
-    Rect {
-        x: 1_200.0,
-        y: 800.0,
-        width: 1_200.0,
-        height: 800.0,
-    },
-];
-
 const IMAGE_CORPUS: &[(&str, &str)] = &[("receipt.jpg", "corpus/real/receipt.jpg")];
+const SHEET_MIN_EXACT_TEXT: f64 = 0.99;
+const SHEET_MAX_P95_ERROR_PX: f64 = 4.0;
 
 const IMAGE_VIEWPORTS: &[Rect] = &[
     Rect {
@@ -81,6 +68,7 @@ struct TextScore {
     ours: u64,
     reference: u64,
     matched: u64,
+    mismatched_sources: u64,
     exact_text: f64,
     geometry: f64,
     combined: f64,
@@ -88,6 +76,23 @@ struct TextScore {
     offset_y: f64,
     mean_error: f64,
     p95_error: f64,
+}
+
+struct ExactScore {
+    ours: u64,
+    reference: u64,
+    matched: u64,
+    mismatched_sources: u64,
+}
+
+struct SheetReference<'a> {
+    html: &'a Path,
+    output: &'a Path,
+    boxes_output: &'a Path,
+    scale: f32,
+    viewport: Rect,
+    font_size: f32,
+    full_text_output: Option<&'a Path>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -149,10 +154,19 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .and_then(|value| value.to_str())
                 .ok_or("invalid spreadsheet corpus name")?
         ));
+        let full_text_path = document_work.join("reference-full-text.json");
         let mut measurements = Vec::new();
+        let viewports = sheet_viewports(page);
+        let sampled_area = viewports.len() as f64 * 1_200.0 * 800.0;
+        let sheet_area = f64::from(page.size.width) * f64::from(page.size.height);
+        println!(
+            "{name}: geometry_viewports={} approximate_area_coverage={:.4}%",
+            viewports.len(),
+            (sampled_area / sheet_area.max(1.0)).min(1.0) * 100.0
+        );
         for dpi in [96_u32, 192] {
             let scale = dpi as f32 / 96.0;
-            for (viewport_index, viewport) in SHEET_VIEWPORTS.iter().enumerate() {
+            for (viewport_index, viewport) in viewports.iter().enumerate() {
                 let ours = rasterise_rect(page, *viewport, scale)?;
                 let ours_path = report.join(format!(
                     "{}-{}-viewport-{}-ours.png",
@@ -172,11 +186,16 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 ));
                 reference_sheet_viewport(
                     &root,
-                    &html,
-                    &reference_path,
-                    &boxes_path,
-                    scale,
-                    *viewport,
+                    SheetReference {
+                        html: &html,
+                        output: &reference_path,
+                        boxes_output: &boxes_path,
+                        scale,
+                        viewport: *viewport,
+                        font_size: sheet_font_size(page),
+                        full_text_output: (dpi == 96 && viewport_index == 0)
+                            .then_some(full_text_path.as_path()),
+                    },
                 )?;
                 let reference = image::open(&reference_path)?.to_rgba8();
                 let ours = image::load_from_memory(&ours_png)?.to_rgba8();
@@ -194,6 +213,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         insert_score(&mut scores, name, &measurements)?;
+        let reference_cells: BTreeMap<String, String> =
+            serde_json::from_slice(&std::fs::read(&full_text_path)?)?;
+        let exact = compare_cell_text(name, &display_cell_text(page), &reference_cells);
+        apply_exact_score(&mut scores, name, exact)?;
     }
     for (name, relative_path) in IMAGE_CORPUS {
         let source = root.join(relative_path);
@@ -323,13 +346,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     for (name, score) in &scores {
         if let Some(text) = &score.text {
             println!(
-                "{name}: text={:.6} exact={:.6} geometry={:.6} matched={}/{}/{} mean_error={:.2}px p95_error={:.2}px registration=({:.2},{:.2})px aligned_ssim={:.6} ink={:.4}%/{:.4}%",
+                "{name}: text={:.6} exact={:.6} geometry={:.6} matched={}/{}/{} mismatched_sources={} mean_error={:.2}px p95_error={:.2}px registration=({:.2},{:.2})px aligned_ssim={:.6} ink={:.4}%/{:.4}%",
                 text.combined,
                 text.exact_text,
                 text.geometry,
                 text.matched,
                 text.ours,
                 text.reference,
+                text.mismatched_sources,
                 text.mean_error,
                 text.p95_error,
                 text.offset_x,
@@ -347,6 +371,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
     }
+    enforce_sheet_publish_bar(&scores)?;
     let scores_path = root.join("harness/baseline.json");
     if update {
         std::fs::write(
@@ -366,6 +391,28 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+fn enforce_sheet_publish_bar(
+    scores: &BTreeMap<String, Score>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for (name, _) in SHEET_CORPUS {
+        let text = scores
+            .get(*name)
+            .and_then(|score| score.text.as_ref())
+            .ok_or_else(|| format!("{name} has no spreadsheet text evidence"))?;
+        if text.exact_text < SHEET_MIN_EXACT_TEXT || text.p95_error > SHEET_MAX_P95_ERROR_PX {
+            return Err(format!(
+                "{name} misses the publish bar: exact={:.6} (minimum {:.2}), p95={:.2}px (maximum {:.1}px)",
+                text.exact_text,
+                SHEET_MIN_EXACT_TEXT,
+                text.p95_error,
+                SHEET_MAX_P95_ERROR_PX,
+            )
+            .into());
+        }
+    }
+    Ok(())
+}
+
 fn mean_for<'a>(
     scores: &BTreeMap<String, Score>,
     names: impl Iterator<Item = &'a str>,
@@ -380,6 +427,47 @@ fn mean_for<'a>(
         })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(values.iter().sum::<f64>() / values.len().max(1) as f64)
+}
+
+fn sheet_viewports(page: &Page) -> Vec<Rect> {
+    const WIDTH: f32 = 1_200.0;
+    const HEIGHT: f32 = 800.0;
+    let max_x = (page.size.width - WIDTH).max(0.0);
+    let max_y = (page.size.height - HEIGHT).max(0.0);
+    let mut viewports = vec![
+        Rect {
+            x: 0.0,
+            y: 0.0,
+            width: WIDTH,
+            height: HEIGHT,
+        },
+        Rect {
+            x: max_x,
+            y: 0.0,
+            width: WIDTH,
+            height: HEIGHT,
+        },
+        Rect {
+            x: max_x * 0.5,
+            y: max_y * 0.5,
+            width: WIDTH,
+            height: HEIGHT,
+        },
+        Rect {
+            x: 0.0,
+            y: max_y,
+            width: WIDTH,
+            height: HEIGHT,
+        },
+        Rect {
+            x: max_x,
+            y: max_y,
+            width: WIDTH,
+            height: HEIGHT,
+        },
+    ];
+    viewports.dedup_by(|left, right| left.x == right.x && left.y == right.y);
+    viewports
 }
 
 fn insert_score(
@@ -401,6 +489,10 @@ fn insert_score(
         let ours: u64 = text_measurements.iter().map(|value| value.ours).sum();
         let reference: u64 = text_measurements.iter().map(|value| value.reference).sum();
         let matched: u64 = text_measurements.iter().map(|value| value.matched).sum();
+        let mismatched_sources = text_measurements
+            .iter()
+            .map(|value| value.mismatched_sources)
+            .sum();
         let exact_text = 2.0 * matched as f64 / (ours + reference).max(1) as f64;
         let matched_weight = matched.max(1) as f64;
         let weighted = |select: fn(&TextScore) -> f64| {
@@ -415,6 +507,7 @@ fn insert_score(
             ours,
             reference,
             matched,
+            mismatched_sources,
             exact_text,
             geometry,
             combined: exact_text * geometry,
@@ -457,6 +550,84 @@ fn insert_score(
             text,
         },
     );
+    Ok(())
+}
+
+fn display_cell_text(page: &Page) -> BTreeMap<String, String> {
+    fn collect(items: &[Item], cells: &mut BTreeMap<String, String>) {
+        for item in items {
+            match item {
+                Item::Glyphs(run) => {
+                    if let Some(SourceRef::Cell { row, column, .. }) = &run.source {
+                        let value = cells.entry(format!("cell:{row}:{column}")).or_default();
+                        if !value.is_empty()
+                            && !value.chars().last().is_some_and(char::is_whitespace)
+                        {
+                            value.push(' ');
+                        }
+                        value.push_str(&run.text);
+                    }
+                }
+                Item::Group(group) => collect(&group.items, cells),
+                Item::Path(_) | Item::Image(_) => {}
+                _ => {}
+            }
+        }
+    }
+    let mut cells = BTreeMap::new();
+    collect(&page.items, &mut cells);
+    cells
+}
+
+fn compare_cell_text(
+    name: &str,
+    ours: &BTreeMap<String, String>,
+    reference: &BTreeMap<String, String>,
+) -> ExactScore {
+    let sources = ours
+        .keys()
+        .chain(reference.keys())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let mut matched = 0_u64;
+    let mut mismatches = Vec::new();
+    for source in sources {
+        let ours_text = ours.get(&source).map(String::as_str).unwrap_or("");
+        let reference_text = reference.get(&source).map(String::as_str).unwrap_or("");
+        if normalize_word(ours_text) == normalize_word(reference_text) {
+            matched += 1;
+        } else {
+            mismatches.push((source, ours_text, reference_text));
+        }
+    }
+    for (source, ours_text, reference_text) in mismatches.iter().take(50) {
+        eprintln!(
+            "{name}: full-sheet mismatch {source} ours={ours_text:?} reference={reference_text:?}"
+        );
+    }
+    ExactScore {
+        ours: ours.len() as u64,
+        reference: reference.len() as u64,
+        matched,
+        mismatched_sources: mismatches.len() as u64,
+    }
+}
+
+fn apply_exact_score(
+    scores: &mut BTreeMap<String, Score>,
+    name: &str,
+    exact: ExactScore,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let text = scores
+        .get_mut(name)
+        .and_then(|score| score.text.as_mut())
+        .ok_or_else(|| format!("{name} has no text geometry measurement"))?;
+    text.ours = exact.ours;
+    text.reference = exact.reference;
+    text.matched = exact.matched;
+    text.mismatched_sources = exact.mismatched_sources;
+    text.exact_text = 2.0 * exact.matched as f64 / (exact.ours + exact.reference).max(1) as f64;
+    text.combined = text.exact_text * text.geometry;
     Ok(())
 }
 
@@ -611,29 +782,53 @@ fn reference_html(source: &Path, output: &Path) -> Result<(), Box<dyn std::error
 
 fn reference_sheet_viewport(
     root: &Path,
-    html: &Path,
-    output: &Path,
-    boxes_output: &Path,
-    scale: f32,
-    viewport: Rect,
+    reference: SheetReference<'_>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let status = Command::new("node")
+    let mut command = Command::new("node");
+    command
         .arg(root.join("harness/render-sheet.mjs"))
-        .arg(html)
-        .arg(output)
-        .arg(boxes_output)
+        .arg(reference.html)
+        .arg(reference.output)
+        .arg(reference.boxes_output)
         .args([
-            scale.to_string(),
-            viewport.x.to_string(),
-            viewport.y.to_string(),
-            viewport.width.to_string(),
-            viewport.height.to_string(),
-        ])
-        .status()?;
+            reference.scale.to_string(),
+            reference.viewport.x.to_string(),
+            reference.viewport.y.to_string(),
+            reference.viewport.width.to_string(),
+            reference.viewport.height.to_string(),
+            reference.font_size.to_string(),
+        ]);
+    if let Some(path) = reference.full_text_output {
+        command.arg(path);
+    }
+    let status = command.status()?;
     if !status.success() {
-        return Err(format!("browser sheet reference failed for {}", html.display()).into());
+        return Err(format!(
+            "browser sheet reference failed for {}",
+            reference.html.display()
+        )
+        .into());
     }
     Ok(())
+}
+
+fn sheet_font_size(page: &Page) -> f32 {
+    fn find(items: &[Item]) -> Option<f32> {
+        for item in items {
+            match item {
+                Item::Glyphs(run) => return Some(run.size_px),
+                Item::Group(group) => {
+                    if let Some(size) = find(&group.items) {
+                        return Some(size);
+                    }
+                }
+                Item::Path(_) | Item::Image(_) => {}
+                _ => {}
+            }
+        }
+        None
+    }
+    find(&page.items).unwrap_or(16.0)
 }
 
 fn ensure_comparable(
@@ -764,21 +959,56 @@ fn shifted_luma(image: &RgbaImage, x: u32, y: u32, offset_x: i32, offset_y: i32)
 
 fn display_text_boxes(page: &Page, viewport: Option<Rect>) -> Vec<TextBox> {
     let mut boxes = Vec::new();
-    collect_text_boxes(&page.items, viewport, &mut boxes);
-    boxes
+    collect_text_boxes(&page.items, viewport, None, &mut boxes);
+    merge_suffix_punctuation(boxes)
 }
 
-fn collect_text_boxes(items: &[Item], viewport: Option<Rect>, boxes: &mut Vec<TextBox>) {
+fn merge_suffix_punctuation(boxes: Vec<TextBox>) -> Vec<TextBox> {
+    let mut merged: Vec<TextBox> = Vec::with_capacity(boxes.len());
+    for text_box in boxes {
+        let suffix = text_box
+            .text
+            .chars()
+            .all(|character| character.is_ascii_punctuation());
+        if suffix {
+            if let Some(previous) = merged.last_mut() {
+                let gap = text_box.x - (previous.x + previous.width);
+                if gap.abs() <= 3.0 && (center_y(previous) - center_y(&text_box)).abs() <= 2.0 {
+                    previous.text.push_str(&text_box.text);
+                    previous.width = (text_box.x + text_box.width - previous.x).max(previous.width);
+                    continue;
+                }
+            }
+        }
+        merged.push(text_box);
+    }
+    merged
+}
+
+fn collect_text_boxes(
+    items: &[Item],
+    viewport: Option<Rect>,
+    active_clip: Option<Rect>,
+    boxes: &mut Vec<TextBox>,
+) {
     for item in items {
         match item {
             Item::Glyphs(run) => {
                 for mut word in glyph_run_words(run) {
+                    if let Some(clip) = active_clip {
+                        let Some(clipped) = clip_text_box(word, clip) else {
+                            continue;
+                        };
+                        word = clipped;
+                    }
                     if let Some(rect) = viewport {
-                        if word.x + word.width <= f64::from(rect.x)
-                            || word.x >= f64::from(rect.x + rect.width)
-                            || word.y + word.height <= f64::from(rect.y)
-                            || word.y >= f64::from(rect.y + rect.height)
-                        {
+                        let sample_rect = active_clip.unwrap_or(Rect {
+                            x: word.x as f32,
+                            y: word.y as f32,
+                            width: word.width as f32,
+                            height: word.height as f32,
+                        });
+                        if !rect_contains_center(rect, sample_rect) {
                             continue;
                         }
                         word.x -= f64::from(rect.x);
@@ -787,11 +1017,55 @@ fn collect_text_boxes(items: &[Item], viewport: Option<Rect>, boxes: &mut Vec<Te
                     boxes.push(word);
                 }
             }
-            Item::Group(group) => collect_text_boxes(&group.items, viewport, boxes),
+            Item::Group(group) => {
+                let clip = match (active_clip, group.clip) {
+                    (Some(parent), Some(child)) => intersect_rect(parent, child),
+                    (Some(parent), None) => Some(parent),
+                    (None, child) => child,
+                };
+                collect_text_boxes(&group.items, viewport, clip, boxes);
+            }
             Item::Path(_) | Item::Image(_) => {}
             _ => {}
         }
     }
+}
+
+fn rect_contains_center(outer: Rect, inner: Rect) -> bool {
+    let center_x = inner.x + inner.width * 0.5;
+    let center_y = inner.y + inner.height * 0.5;
+    center_x >= outer.x
+        && center_x < outer.x + outer.width
+        && center_y >= outer.y
+        && center_y < outer.y + outer.height
+}
+
+fn intersect_rect(left: Rect, right: Rect) -> Option<Rect> {
+    let x = left.x.max(right.x);
+    let y = left.y.max(right.y);
+    let right_edge = (left.x + left.width).min(right.x + right.width);
+    let bottom = (left.y + left.height).min(right.y + right.height);
+    (right_edge > x && bottom > y).then_some(Rect {
+        x,
+        y,
+        width: right_edge - x,
+        height: bottom - y,
+    })
+}
+
+fn clip_text_box(mut text_box: TextBox, clip: Rect) -> Option<TextBox> {
+    let x = text_box.x.max(f64::from(clip.x));
+    let y = text_box.y.max(f64::from(clip.y));
+    let right = (text_box.x + text_box.width).min(f64::from(clip.x + clip.width));
+    let bottom = (text_box.y + text_box.height).min(f64::from(clip.y + clip.height));
+    if right <= x || bottom <= y {
+        return None;
+    }
+    text_box.x = x;
+    text_box.y = y;
+    text_box.width = right - x;
+    text_box.height = bottom - y;
+    Some(text_box)
 }
 
 fn glyph_run_words(run: &GlyphRun) -> Vec<TextBox> {
@@ -892,6 +1166,7 @@ fn source_key(source: &SourceRef) -> Option<String> {
 }
 
 fn compare_text(name: &str, ours: &[TextBox], reference: &[TextBox]) -> TextScore {
+    let mismatched_sources = report_source_mismatches(name, ours, reference);
     let mut ours_by_text: BTreeMap<String, Vec<&TextBox>> = BTreeMap::new();
     for text_box in ours {
         ours_by_text
@@ -961,6 +1236,7 @@ fn compare_text(name: &str, ours: &[TextBox], reference: &[TextBox]) -> TextScor
             ours: ours.len() as u64,
             reference: reference.len() as u64,
             matched: 0,
+            mismatched_sources,
             exact_text,
             geometry: 0.0,
             combined: 0.0,
@@ -1003,20 +1279,25 @@ fn compare_text(name: &str, ours: &[TextBox], reference: &[TextBox]) -> TextScor
     let p95_error = errors[p95_index].0;
     for (error, ours, reference) in errors.iter().rev().take(5).filter(|entry| entry.0 > 8.0) {
         eprintln!(
-            "{name}: text geometry drift {:.1}px for {:?} {:?} ours=({:.1},{:.1}) reference=({:.1},{:.1})",
+            "{name}: text geometry drift {:.1}px for {:?} {:?} ours=({:.1},{:.1},{:.1}x{:.1}) reference=({:.1},{:.1},{:.1}x{:.1})",
             error,
             ours.text,
             ours.source.as_deref().unwrap_or("unknown source"),
             ours.x,
             ours.y,
+            ours.width,
+            ours.height,
             reference.x,
             reference.y,
+            reference.width,
+            reference.height,
         );
     }
     TextScore {
         ours: ours.len() as u64,
         reference: reference.len() as u64,
         matched: pairs.len() as u64,
+        mismatched_sources,
         exact_text,
         geometry,
         combined: exact_text * geometry,
@@ -1027,8 +1308,51 @@ fn compare_text(name: &str, ours: &[TextBox], reference: &[TextBox]) -> TextScor
     }
 }
 
+fn report_source_mismatches(name: &str, ours: &[TextBox], reference: &[TextBox]) -> u64 {
+    let collect = |boxes: &[TextBox]| {
+        let mut values: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for text_box in boxes {
+            if let Some(source) = text_box.source_key.as_deref() {
+                values
+                    .entry(source.to_owned())
+                    .or_default()
+                    .push(text_box.text.clone());
+            }
+        }
+        values
+    };
+    let ours_by_source = collect(ours);
+    let reference_by_source = collect(reference);
+    let sources = ours_by_source
+        .keys()
+        .chain(reference_by_source.keys())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let mut mismatches = Vec::new();
+    for source in sources {
+        let ours_text = ours_by_source
+            .get(&source)
+            .map(|words| words.join(" "))
+            .unwrap_or_default();
+        let reference_text = reference_by_source
+            .get(&source)
+            .map(|words| words.join(" "))
+            .unwrap_or_default();
+        if normalize_word(&ours_text) != normalize_word(&reference_text) {
+            mismatches.push((source, ours_text, reference_text));
+        }
+    }
+    for (source, ours_text, reference_text) in mismatches.iter().take(20) {
+        eprintln!("{name}: text mismatch {source} ours={ours_text:?} reference={reference_text:?}");
+    }
+    mismatches.len() as u64
+}
+
 fn normalize_word(word: &str) -> String {
-    word.trim().to_lowercase()
+    word.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
 }
 
 fn match_key(text_box: &TextBox) -> String {
@@ -1247,5 +1571,71 @@ mod tests {
         assert_eq!(score.matched, 0);
         assert_eq!(score.exact_text, 0.0);
         assert!(serde_json::to_string(&score).is_ok());
+    }
+
+    #[test]
+    fn adjacent_styled_punctuation_remains_one_reference_word() {
+        let boxes = vec![
+            TextBox {
+                text: "bold".into(),
+                x: 10.0,
+                y: 10.0,
+                width: 24.0,
+                height: 12.0,
+                source: Some("paragraph 1".into()),
+                source_key: None,
+            },
+            TextBox {
+                text: ".".into(),
+                x: 34.5,
+                y: 10.0,
+                width: 3.0,
+                height: 12.0,
+                source: Some("paragraph 1".into()),
+                source_key: None,
+            },
+        ];
+        let merged = merge_suffix_punctuation(boxes);
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].text, "bold.");
+    }
+
+    #[test]
+    fn spreadsheet_publish_bar_rejects_text_loss_and_geometry_drift() {
+        let score = |exact_text, p95_error| Score {
+            pixel: PixelScore {
+                aligned_ssim: 0.0,
+                offset_x: 0.0,
+                offset_y: 0.0,
+                ink_density_ours: 0.0,
+                ink_density_reference: 0.0,
+            },
+            text: Some(TextScore {
+                ours: 100,
+                reference: 100,
+                matched: 100,
+                mismatched_sources: 0,
+                exact_text,
+                geometry: 1.0,
+                combined: exact_text,
+                offset_x: 0.0,
+                offset_y: 0.0,
+                mean_error: 0.0,
+                p95_error,
+            }),
+        };
+        let passing = SHEET_CORPUS
+            .iter()
+            .map(|(name, _)| ((*name).to_owned(), score(0.99, 4.0)))
+            .collect();
+        assert!(enforce_sheet_publish_bar(&passing).is_ok());
+
+        let mut text_loss = passing.clone();
+        text_loss.insert(SHEET_CORPUS[0].0.into(), score(0.989, 1.0));
+        assert!(enforce_sheet_publish_bar(&text_loss).is_err());
+
+        let mut drift = passing;
+        drift.insert(SHEET_CORPUS[1].0.into(), score(1.0, 4.01));
+        assert!(enforce_sheet_publish_bar(&drift).is_err());
     }
 }

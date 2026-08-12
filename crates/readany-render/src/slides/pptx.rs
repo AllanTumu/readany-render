@@ -316,6 +316,9 @@ fn parse_slide(
                     RenderError::malformed("slide text is malformed; obtain a fresh copy")
                 })?);
             }
+            Ok(Event::GeneralRef(reference)) if in_t => {
+                text.push_str(&xml::decode_reference(&reference)?);
+            }
             Ok(Event::End(s))
                 if matches!(
                     xml::local_name(s.name().as_ref()),

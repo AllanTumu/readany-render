@@ -41,3 +41,14 @@ pub(crate) fn validate(bytes: &[u8], limits: &Limits) -> Result<(), RenderError>
 pub(crate) fn local_name(name: &[u8]) -> &[u8] {
     name.rsplit(|byte| *byte == b':').next().unwrap_or(name)
 }
+
+pub(crate) fn decode_reference(
+    reference: &quick_xml::events::BytesRef<'_>,
+) -> Result<String, RenderError> {
+    let reference = reference
+        .decode()
+        .map_err(|_| RenderError::malformed("an XML reference is invalid; obtain a fresh copy"))?;
+    quick_xml::escape::unescape(&format!("&{reference};"))
+        .map(|value| value.into_owned())
+        .map_err(|_| RenderError::malformed("an XML reference is invalid; obtain a fresh copy"))
+}

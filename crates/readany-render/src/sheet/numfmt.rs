@@ -13,6 +13,100 @@ pub(crate) fn format_number(value: f64, code: &str, date_1904: bool) -> String {
     format_numeric(value, &section, use_absolute)
 }
 
+pub(crate) fn format_general_lexical(value: &str) -> Option<String> {
+    let value = value.trim();
+    let (negative, value) = value
+        .strip_prefix('-')
+        .map(|value| (true, value))
+        .unwrap_or((false, value));
+    let (coefficient, exponent) = value
+        .split_once(['e', 'E'])
+        .map(|(coefficient, exponent)| Some((coefficient, exponent.parse::<i32>().ok()?)))
+        .unwrap_or(Some((value, 0)))?;
+    let (integer, fractional) = coefficient.split_once('.').unwrap_or((coefficient, ""));
+    if integer.is_empty() && fractional.is_empty() {
+        return None;
+    }
+    let mut digits = integer
+        .bytes()
+        .chain(fractional.bytes())
+        .map(|digit| digit.checked_sub(b'0').filter(|digit| *digit <= 9))
+        .collect::<Option<Vec<_>>>()?;
+    let mut decimal_position = i32::try_from(integer.len()).ok()?.checked_add(exponent)?;
+    let leading_zeros = digits.iter().take_while(|digit| **digit == 0).count();
+    if leading_zeros == digits.len() {
+        return Some("0".into());
+    }
+    digits.drain(..leading_zeros);
+    decimal_position -= i32::try_from(leading_zeros).ok()?;
+    if digits.len() > 15 {
+        let round_up = digits[15] >= 5;
+        digits.truncate(15);
+        if round_up {
+            let mut carry = true;
+            for digit in digits.iter_mut().rev() {
+                if *digit == 9 {
+                    *digit = 0;
+                } else {
+                    *digit += 1;
+                    carry = false;
+                    break;
+                }
+            }
+            if carry {
+                digits.insert(0, 1);
+                decimal_position += 1;
+            }
+        }
+    }
+    while digits.last() == Some(&0) {
+        digits.pop();
+    }
+    let scientific_exponent = decimal_position - 1;
+    let mut output = String::new();
+    if negative {
+        output.push('-');
+    }
+    if !(-9..15).contains(&scientific_exponent) {
+        output.push(char::from(b'0' + digits[0]));
+        if digits.len() > 1 {
+            output.push('.');
+            output.extend(digits[1..].iter().map(|digit| char::from(b'0' + *digit)));
+        }
+        output.push('E');
+        if scientific_exponent >= 0 {
+            output.push('+');
+        }
+        output.push_str(&scientific_exponent.to_string());
+    } else if decimal_position <= 0 {
+        output.push_str("0.");
+        output.extend(std::iter::repeat_n(
+            '0',
+            usize::try_from(-decimal_position).ok()?,
+        ));
+        output.extend(digits.iter().map(|digit| char::from(b'0' + *digit)));
+    } else {
+        let decimal_position = usize::try_from(decimal_position).ok()?;
+        if decimal_position >= digits.len() {
+            output.extend(digits.iter().map(|digit| char::from(b'0' + *digit)));
+            output.extend(std::iter::repeat_n('0', decimal_position - digits.len()));
+        } else {
+            output.extend(
+                digits[..decimal_position]
+                    .iter()
+                    .map(|digit| char::from(b'0' + *digit)),
+            );
+            output.push('.');
+            output.extend(
+                digits[decimal_position..]
+                    .iter()
+                    .map(|digit| char::from(b'0' + *digit)),
+            );
+        }
+    }
+    Some(output)
+}
+
 pub(crate) fn format_text(value: &str, code: &str) -> String {
     let sections = split_sections(code);
     sections
@@ -28,7 +122,20 @@ fn general(value: f64) -> String {
     if value.fract() == 0.0 && value.abs() < 1e15 {
         return format!("{value:.0}");
     }
-    let plain = format!("{value:.10}");
+    // Excel stores and displays at most 15 significant decimal digits. A fixed
+    // ten fractional digits silently changed high-precision General cells in
+    // the real stress workbook, especially values between 1 and 1,000.
+    let magnitude = value.abs();
+    let exponent = magnitude.log10().floor() as i32;
+    if !(-9..15).contains(&exponent) {
+        let scientific = format!("{value:.14E}");
+        let (mantissa, exponent) = scientific.split_once('E').unwrap_or((&scientific, "0"));
+        let mantissa = mantissa.trim_end_matches('0').trim_end_matches('.');
+        let exponent = exponent.parse::<i32>().unwrap_or(0);
+        return format!("{mantissa}E{exponent:+}");
+    }
+    let decimals = usize::try_from((14 - exponent).max(0)).unwrap_or(0);
+    let plain = format!("{value:.decimals$}");
     plain.trim_end_matches('0').trim_end_matches('.').to_owned()
 }
 

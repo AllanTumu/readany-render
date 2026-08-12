@@ -354,6 +354,11 @@ fn parse_tables(
                     );
                 }
             }
+            Ok(Event::GeneralRef(reference)) if in_text => {
+                if let Some(cell) = &mut cell {
+                    cell.text.push_str(&xml::decode_reference(&reference)?);
+                }
+            }
             Ok(Event::Empty(start)) | Ok(Event::Start(start))
                 if attr(&start, b"href").is_some_and(|target| target.contains("://")) =>
             {
@@ -611,6 +616,16 @@ fn parse_frozen(bytes: &[u8]) -> Result<Option<FrozenPanes>, RenderError> {
                     "HorizontalSplitPosition" | "SplitPositionHorizontal" => columns = value,
                     "VerticalSplitPosition" | "SplitPositionVertical" => rows = value,
                     _ => {}
+                }
+            }
+            Ok(Event::GeneralRef(reference)) if in_item => {
+                let value = xml::decode_reference(&reference)?;
+                if let Ok(value) = value.parse::<u32>() {
+                    match name.as_str() {
+                        "HorizontalSplitPosition" | "SplitPositionHorizontal" => columns = value,
+                        "VerticalSplitPosition" | "SplitPositionVertical" => rows = value,
+                        _ => {}
+                    }
                 }
             }
             Ok(Event::End(end)) if xml::local_name(end.name().as_ref()) == b"config-item" => {

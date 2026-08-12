@@ -289,6 +289,9 @@ fn parse_pages(
                     RenderError::malformed("presentation text is malformed; obtain a fresh copy")
                 })?)
             }
+            Ok(Event::GeneralRef(reference)) if in_text => {
+                shape.text.push_str(&xml::decode_reference(&reference)?)
+            }
             Ok(Event::Empty(start)) | Ok(Event::Start(start))
                 if in_page && xml::local_name(start.name().as_ref()) == b"image" =>
             {
@@ -367,6 +370,9 @@ fn parse_shapes(
             }
             Ok(Event::Text(value)) if in_text => {
                 shape.text.push_str(&value.decode().unwrap_or_default())
+            }
+            Ok(Event::GeneralRef(reference)) if in_text => {
+                shape.text.push_str(&xml::decode_reference(&reference)?)
             }
             Ok(Event::Eof) => break,
             Ok(_) => {}

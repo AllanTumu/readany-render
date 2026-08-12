@@ -33,6 +33,14 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Fidelity gates display-list text identity and box geometry against PDF bbox or
   source-aware sheet DOM boxes. Pixel SSIM searches plus or minus 3 px, reports
   ink density, rejects incomparable dimensions, and remains diagnostic only.
+- Real-sheet exact text now covers every non-empty cell, geometry samples five
+  distributed viewports, and a non-waivable 99% exact / 4 px p95 publish bar is
+  enforced. Reference fonts use the same metric-compatible substitutions.
+- XLSX respects declared default row heights and inherited base font properties,
+  preserves XML comparison characters, and formats `General` values to Excel's
+  15-significant-digit display precision without binary floating-point drift.
+- XML character references are retained across DOCX, ODT, ODS, PPTX, and ODP
+  text paths instead of being silently dropped by event parsing.
 
 ### Removed
 

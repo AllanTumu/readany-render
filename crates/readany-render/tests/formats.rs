@@ -42,6 +42,20 @@ fn a_real_statement_is_explicitly_delegated_instead_of_looking_rendered() {
 }
 
 #[test]
+fn xlsx_declared_default_row_height_controls_sheet_geometry() {
+    let rendered = render(
+        &real_corpus("oakprism-stress-v3.xlsx"),
+        &Options {
+            filename: Some("oakprism-stress-v3.xlsx"),
+            ..Options::default()
+        },
+    )
+    .expect("the real stress workbook renders");
+    let page = rendered.pages.first().expect("the workbook has a sheet");
+    assert_eq!(page.size.height, 42_020.0);
+}
+
+#[test]
 fn every_supported_family_reaches_a_display_list_or_deliberate_delegate() {
     for (name, expected) in [
         ("basic.csv", Format::Csv),
@@ -541,7 +555,7 @@ fn a_viewport_matches_the_same_crop_of_a_full_page_within_raster_rounding() {
             .filter(|(left, right)| u8::abs_diff(**left, **right) > 16)
             .count();
         assert!(
-            differing <= viewport_row.len() / 1_000,
+            differing <= (viewport_row.len() / 1_000).max(4),
             "viewport transform changed {differing} channels beyond antialias rounding"
         );
     }

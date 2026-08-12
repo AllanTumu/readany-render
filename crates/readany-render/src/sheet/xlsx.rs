@@ -201,11 +201,21 @@ fn parse_shared_strings(bytes: &[u8], limits: &crate::Limits) -> Result<Vec<Stri
                 in_t = true
             }
             Ok(Event::End(s)) if xml::local_name(s.name().as_ref()) == b"t" => in_t = false,
-            Ok(Event::Text(t)) if in_t => current.push_str(&t.decode().map_err(|_| {
-                RenderError::malformed(
-                    "shared strings contain invalid XML text; obtain a fresh copy",
-                )
-            })?),
+            Ok(Event::Text(t)) if in_t => {
+                let decoded = t.decode().map_err(|_| {
+                    RenderError::malformed(
+                        "shared strings contain invalid XML text; obtain a fresh copy",
+                    )
+                })?;
+                current.push_str(&quick_xml::escape::unescape(&decoded).map_err(|_| {
+                    RenderError::malformed(
+                        "shared strings contain invalid XML escapes; obtain a fresh copy",
+                    )
+                })?);
+            }
+            Ok(Event::GeneralRef(reference)) if in_t => {
+                current.push_str(&xml::decode_reference(&reference)?);
+            }
             Ok(Event::Eof) => break,
             Ok(_) => {}
             Err(_) => {
@@ -239,6 +249,7 @@ fn parse_sheet(
     let mut cells = Vec::new();
     let mut widths: BTreeMap<u32, f32> = BTreeMap::new();
     let mut heights: BTreeMap<u32, f32> = BTreeMap::new();
+    let mut default_row_height = 20.0_f32;
     let mut merges = Vec::new();
     let mut frozen = None;
     let mut unrendered = Vec::new();
@@ -253,6 +264,16 @@ fn parse_sheet(
     let mut conditional = 0_u32;
     loop {
         match reader.read_event() {
+            Ok(Event::Empty(s)) | Ok(Event::Start(s))
+                if xml::local_name(s.name().as_ref()) == b"sheetFormatPr" =>
+            {
+                if let Some(height) = attr(&s, b"defaultRowHeight")
+                    .and_then(|value| value.parse::<f32>().ok())
+                    .filter(|height| height.is_finite() && *height > 0.0)
+                {
+                    default_row_height = height * 96.0 / 72.0;
+                }
+            }
             Ok(Event::Empty(s)) | Ok(Event::Start(s))
                 if xml::local_name(s.name().as_ref()) == b"col" =>
             {
@@ -317,9 +338,21 @@ fn parse_sheet(
             Ok(Event::Text(t)) if in_v => value.push_str(&t.decode().map_err(|_| {
                 RenderError::malformed("a cell value is invalid XML text; obtain a fresh copy")
             })?),
-            Ok(Event::Text(t)) if in_t => inline.push_str(&t.decode().map_err(|_| {
-                RenderError::malformed("an inline string is invalid XML text; obtain a fresh copy")
-            })?),
+            Ok(Event::Text(t)) if in_t => {
+                let decoded = t.decode().map_err(|_| {
+                    RenderError::malformed(
+                        "an inline string is invalid XML text; obtain a fresh copy",
+                    )
+                })?;
+                inline.push_str(&quick_xml::escape::unescape(&decoded).map_err(|_| {
+                    RenderError::malformed(
+                        "an inline string contains invalid XML escapes; obtain a fresh copy",
+                    )
+                })?);
+            }
+            Ok(Event::GeneralRef(reference)) if in_t => {
+                inline.push_str(&xml::decode_reference(&reference)?);
+            }
             Ok(Event::End(s)) if xml::local_name(s.name().as_ref()) == b"c" => {
                 if let Some(mut cell) = current.take() {
                     cell.formula_without_value = has_formula && !has_cached_value;
@@ -420,25 +453,8 @@ fn parse_sheet(
     let cols = (0..=max_col)
         .map(|c| *widths.get(&c).unwrap_or(&64.0))
         .collect::<Vec<_>>();
-    // Derive every row height in one pass. Filtering the full cell vector once
-    // per row made the 393 x 328 motivating workbook quadratic and measured
-    // 1.46 s despite containing fewer cells than the synthetic performance file.
-    let mut derived_heights = vec![20.0_f32; max_row as usize + 1];
-    for cell in &cells {
-        if let Some(style) = styles.cells.get(cell.style) {
-            let height = style.font.size_px * 1.2 + 4.0;
-            if let Some(current) = derived_heights.get_mut(cell.row as usize) {
-                *current = current.max(height);
-            }
-        }
-    }
     let rows = (0..=max_row)
-        .map(|row| {
-            heights
-                .get(&row)
-                .copied()
-                .unwrap_or(derived_heights[row as usize])
-        })
+        .map(|row| heights.get(&row).copied().unwrap_or(default_row_height))
         .collect::<Vec<_>>();
     let xs = prefix(&cols);
     let ys = prefix(&rows);
@@ -630,6 +646,9 @@ fn cell_value(
         }
         "e" | "d" => value.into(),
         "str" => numfmt::format_text(value, format),
+        _ if format.eq_ignore_ascii_case("general") => {
+            numfmt::format_general_lexical(value).unwrap_or_else(|| value.into())
+        }
         _ => value
             .parse::<f64>()
             .map(|n| numfmt::format_number(n, format, date_1904))
@@ -845,8 +864,26 @@ mod tests {
     fn general_numbers_are_formatted_instead_of_echoing_xml_lexemes() {
         assert_eq!(cell_value("n", "14.0", "", &[], "General", false), "14");
         assert_eq!(
+            cell_value("n", "99.24450792793081", "", &[], "General", false),
+            "99.2445079279308"
+        );
+        assert_eq!(
+            cell_value("n", "4.638514392343736", "", &[], "General", false),
+            "4.63851439234374"
+        );
+        assert_eq!(
             cell_value("n", "1.296049239E9", "", &[], "General", false),
             "1296049239"
         );
+    }
+
+    #[test]
+    fn shared_strings_unescape_xml_comparison_characters() {
+        let values = super::parse_shared_strings(
+            br#"<sst><si><t>&lt;1yr</t></si><si><t>&gt;9yrs</t></si></sst>"#,
+            &crate::Limits::default(),
+        )
+        .unwrap_or_else(|error| panic!("the shared string table is valid: {error}"));
+        assert_eq!(values, ["<1yr", ">9yrs"]);
     }
 }

@@ -374,6 +374,9 @@ fn parse_content(bytes: &[u8], styles: &Styles) -> Result<ParsedContent, RenderE
             Ok(Event::Text(value)) if active => text.push_str(&value.decode().map_err(|_| {
                 RenderError::malformed("ODT text is malformed; obtain a fresh copy")
             })?),
+            Ok(Event::GeneralRef(reference)) if active => {
+                text.push_str(&xml::decode_reference(&reference)?)
+            }
             Ok(Event::End(end)) => match xml::local_name(end.name().as_ref()) {
                 b"span" if active => {
                     flush_text(&mut runs, &mut text, &current_style);

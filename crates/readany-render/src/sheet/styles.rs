@@ -128,7 +128,12 @@ pub(crate) fn parse(bytes: &[u8]) -> Result<Styles, RenderError> {
                     b"fills" => section = Section::Fills,
                     b"borders" => section = Section::Borders,
                     b"cellXfs" => section = Section::CellXfs,
-                    b"font" if section == Section::Fonts => font = Some(FontStyle::default()),
+                    b"font" if section == Section::Fonts => {
+                        // Spreadsheet producers commonly omit properties that match the
+                        // workbook's base font. Preserve those inherited properties rather
+                        // than resetting every font record to Calibri 11 pt.
+                        font = Some(fonts.first().cloned().unwrap_or_default());
+                    }
                     b"fill" if section == Section::Fills => fill = Some(FillStyle::default()),
                     b"border" if section == Section::Borders => {
                         border = Some(BorderStyle::default())
@@ -503,4 +508,21 @@ fn attr(start: &BytesStart<'_>, name: &[u8]) -> Option<String> {
         .flatten()
         .find(|attribute| xml::local_name(attribute.key.as_ref()) == name)
         .map(|attribute| String::from_utf8_lossy(attribute.value.as_ref()).into_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse;
+
+    #[test]
+    fn later_fonts_inherit_omitted_base_properties() {
+        let styles = parse(
+            br#"<styleSheet><fonts count="2"><font><sz val="10"/><name val="Arial"/></font><font><b/></font></fonts><fills><fill/></fills><borders><border/></borders><cellXfs><xf fontId="1"/></cellXfs></styleSheet>"#,
+        )
+        .unwrap_or_else(|error| panic!("styles should parse: {error}"));
+
+        assert_eq!(styles.cells[0].font.family, "Arial");
+        assert!((styles.cells[0].font.size_px - 13.333_333).abs() < 0.001);
+        assert!(styles.cells[0].font.bold);
+    }
 }
