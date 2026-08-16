@@ -56,9 +56,11 @@ the corpus behind it; results from one format are never generalized to another.
 
 **Read the flow-format rows carefully.** The page-aligned scores in
 `docs/FIDELITY.md` combine text identity with geometry. The August 13 fixes
-restore exact pagination for the real DOCX and ODT documents and materially
-improve all three flow/slide geometry scores, but the remaining p95 drift is
-still reported rather than promoted as publication readiness.
+restored exact pagination for the real DOCX and ODT documents, and the August 16
+round laid Word tables out as columns and placed slide shapes through their
+groups. ODT is now placed about as well as it is read; DOCX and PPTX improved
+materially and the remaining p95 drift is still reported rather than promoted as
+publication readiness.
 
 | Format | Status | Evidence |
 | --- | --- | --- |
@@ -67,10 +69,10 @@ still reported rather than promoted as publication readiness.
 | ODS | Implemented; not real-corpus proven | Generated ODS fixtures and golden/raster tests only |
 | CSV | Implemented; parser-tested only | Generated quoted-field/newline fixtures only |
 | TSV | Implemented; parser-tested only | Generated delimiter fixtures only |
-| DOCX | Text near-complete, placement poor | Real NIST chapter: pagination now 34 pages against 34 and exact text 0.8030, but geometry 0.2536 and p95 561 px — the worst-drifting text is still half a page out of position. |
-| ODT | Proven on current corpus | Real UK IPO agreement: **1.0000 exact text**, geometry 0.8006, p95 35.29 px, and pagination matching LibreOffice. |
+| DOCX | Reading and table structure good, vertical flow poor | Real NIST chapter: 34 pages against 34, exact text 0.8549, and table columns that agree with LibreOffice to 0.2 px — but geometry 0.2749 and p95 348 px, because content still drifts vertically down the page. |
+| ODT | Proven on current corpus | Real UK IPO agreement: **1.0000 exact text**, geometry 0.9533, p95 1.73 px, and pagination matching LibreOffice. |
 | RTF | Implemented; synthetic evidence only | `basic.rtf`: 100% exact text, 8.07 px p95; no real RTF corpus document |
-| PPTX | Text near-complete, placement poor | Real NASA deck: correct slide count and exact text 0.9452, but geometry 0.2527 and p95 237 px on a 720 px slide. |
+| PPTX | Text near-complete, placement improving | Real NASA deck: correct slide count and exact text 0.9473, geometry 0.3719 and p95 178 px on a 720 px slide. Shape *position* is right where the deck says it plainly; the residue is in grouped and tabular frames. |
 | ODP | Implemented; synthetic evidence only | `basic.odp`: 100% exact text, 4.97 px p95; no real ODP corpus document |
 | PNG | Implemented; parser/raster tested | Generated image fixtures |
 | JPEG | Implemented; photographed evidence | Real photographed receipt plus EXIF-orientation fixtures |

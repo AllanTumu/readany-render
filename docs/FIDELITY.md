@@ -28,7 +28,7 @@ px**. Page-document floors are document-specific because the evidence is not
 uniform; they preserve the measured starting point but do not turn a poor
 starting point into a fidelity claim.
 
-Measured 13 August 2026:
+Measured 16 August 2026, after the flow-table and slide-placement round:
 
 | Corpus document | Exact | Geometry | Text fidelity | Mean / p95 error |
 | --- | ---: | ---: | ---: | ---: |
@@ -38,13 +38,14 @@ Measured 13 August 2026:
 | `basic.pptx` | 1.000000 | 0.682948 | 0.682948 | 4.61 / 5.48 px |
 | `basic.rtf` | 1.000000 | 0.717480 | 0.717480 | 4.30 / 8.07 px |
 | `sheet-a.xlsx` | 1.000000 | 0.978372 | 0.978372 | 0.26 / 0.27 px |
-| `nasa-agency-report-2022.pptx` | 0.945187 | 0.252692 | 0.238842 | 70.09 / 237.07 px |
-| `nist-hb133-2026-chapter-2.docx` | 0.802986 | 0.253570 | 0.203613 | 117.97 / 561.48 px |
+| `nasa-agency-report-2022.pptx` | 0.947298 | 0.371865 | 0.352267 | 46.17 / 177.55 px |
+| `nist-hb133-2026-chapter-2.docx` | 0.854857 | 0.274914 | 0.235012 | 77.05 / 347.53 px |
 | `sheet-b.xlsx` | 1.000000 | 0.967207 | 0.967207 | 0.45 / 3.27 px |
-| `uk-ipo-one-way-nda.odt` | 1.000000 | 0.800640 | 0.800640 | 13.16 / 35.29 px |
+| `uk-ipo-one-way-nda.odt` | 1.000000 | 0.953337 | 0.953337 | 0.58 / 1.73 px |
 
-The page-document text-fidelity mean is **0.615785** and the real-sheet mean is
-**0.972789**. These remain regression evidence, not proof of universal format
+The page-document text-fidelity mean is **0.652975** and the real-sheet mean is
+**0.972789**. Every synthetic fixture and both workbooks are unchanged to the
+last recorded digit; only the three real flow and slide documents moved. These remain regression evidence, not proof of universal format
 fidelity. CI rejects per-document or corpus regression beyond 0.001, requires
 baseline keys to match the corpus, and enforces both sets of hard floors.
 
@@ -86,6 +87,47 @@ Three different facts, and the single number hid all three:
   paint order. Geometry rose from **0.098206 to 0.252692**, p95 fell from
   **373.57 to 237.07 px**, and the slide count remains 11/11.
 
+### The 16 August round: what was placed, not what was read
+
+The three rounds above fixed reading and pagination. What remained was
+placement, and the round of 16 August 2026 found it in six places rather than
+the one the working prompt predicted.
+
+The prompt's central claim was that a table-bearing DOCX emitted **zero** cell
+rectangles. It did not: the NIST chapter emitted **96** closed rectangles before
+this round, one per row segment, at a hard-coded 22 px height. **The boxes were
+being drawn; it was the cells that were not.** A row was flattened into a single
+tab-separated paragraph, so the columns were tab stops rather than boxes, a cell
+that wrapped restarted at the table's left edge, and the row's alignment came
+from whichever cell happened to be first. The rules were also drawn
+unconditionally, in black, whether or not the table declared any. The renderer
+now emits **291 cell edges** on the same document, each one from a `w:tblBorders`
+or `w:tcBorders` rule the document actually declares, and the table columns agree
+with LibreOffice to **0.2 px**.
+
+| Corpus document | Geometry | Exact | p95 error |
+| --- | ---: | ---: | ---: |
+| `uk-ipo-one-way-nda.odt` | 0.800640 → **0.953337** | 1.000000 | 35.29 → **1.73 px** |
+| `nasa-agency-report-2022.pptx` | 0.252692 → **0.371865** | 0.945187 → **0.947298** | 237.07 → **177.55 px** |
+| `nist-hb133-2026-chapter-2.docx` | 0.253570 → **0.274914** | 0.802986 → **0.854857** | 561.48 → **347.53 px** |
+
+* **ODT moved furthest, and not because of anything ODT-specific.** Tab stops
+  had no alignment and were measured from the paragraph indent rather than the
+  text margin, and the indent was not treated as the implicit stop it is. The
+  agreement's hanging-indent clauses were the visible cost; its mean drift fell
+  from 13.16 px to **0.58 px**.
+* **DOCX is now read well and still placed poorly, but for a different reason.**
+  Exact text rose to 0.854857 once hidden `w:vanish` paragraphs stopped being
+  drawn and multi-level `w:lvlText` labels were substituted at every level. The
+  residual is vertical: content accumulates a page-scale offset down the
+  document even though pagination stays at 34/34.
+* **PPTX group shapes were not read at all.** `p:grpSp` declares both where the
+  group sits and the coordinate space its children are written in; the deck's
+  second slide holds 44 groups whose children were each placed at their raw
+  offset. Slide 11's text was also drawn at little over half size, because a run
+  that omits `sz` takes its paragraph's `a:defRPr` and only `a:rPr` was read —
+  that slide alone went from 0.0009 to 0.3107 geometry.
+
 So two questions were being answered by one number, and they have different
 answers:
 
@@ -114,14 +156,14 @@ agreement. `pagination` is `min(ours, reference) / max(ours, reference)`.
 | `basic.rtf` | 1.000000 / 0.99 | 8.07 / 8.25 px | 1 / 1 | 1.000000 / 1.00 |
 | `basic.pptx` | 1.000000 / 0.99 | 5.48 / 5.60 px | 1 / 1 | 1.000000 / 1.00 |
 | `basic.odp` | 1.000000 / 0.99 | 4.97 / 5.10 px | 1 / 1 | 1.000000 / 1.00 |
-| `nist-hb133-2026-chapter-2.docx` | 0.802986 / 0.80 | 561.48 / 562.00 px | 34 / 34 | 1.000000 / 1.00 |
-| `nasa-agency-report-2022.pptx` | 0.945187 / 0.87 | 237.07 / 238.00 px | 11 / 11 | 1.000000 / 1.00 |
-| `uk-ipo-one-way-nda.odt` | 1.000000 / 0.99 | 35.29 / 36.00 px | 2 / 2 | 1.000000 / 1.00 |
+| `nist-hb133-2026-chapter-2.docx` | 0.854857 / 0.85 | 347.53 / 350.00 px | 34 / 34 | 1.000000 / 1.00 |
+| `nasa-agency-report-2022.pptx` | 0.947298 / 0.94 | 177.55 / 180.00 px | 11 / 11 | 1.000000 / 1.00 |
+| `uk-ipo-one-way-nda.odt` | 1.000000 / 0.99 | 1.73 / 2.50 px | 2 / 2 | 1.000000 / 1.00 |
 
 The real corpus still answers questions the synthetic fixtures cannot. ODT and
-DOCX now paginate exactly, and all three repaired formats materially improve
-their geometry, but the remaining 35.29, 561.48, and 237.07 px p95 errors are
-not publication-readiness claims. PPTX also retains explicit unsupported EMF
+DOCX paginate exactly, ODT is now placed as well as it is read, and the DOCX and
+PPTX floors have been tightened onto the new measurements. The remaining 347.53
+and 177.55 px p95 errors are not publication-readiness claims. PPTX also retains explicit unsupported EMF
 evidence rather than silently dropping those assets.
 
 Only pages present on both sides contribute text and pixel measurements; extra

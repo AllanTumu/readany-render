@@ -5,6 +5,44 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- **Word tables are laid out as columns.** A table row was flattened into one
+  tab-separated paragraph, so a cell that wrapped restarted at the table's left
+  edge and dragged every later column with it, and the row took its alignment
+  from whichever cell happened to be first. Each cell is now laid out in its own
+  column box, the row is as tall as its tallest cell, and `w:tblBorders`,
+  `w:tcBorders`, `w:gridSpan`, `w:vMerge`, `w:vAlign` and `w:tblCellMar` are
+  read. Rules are drawn only where the document declares them; a bare `w:tbl` is
+  borderless and used to be drawn with a black rectangle round every cell.
+- **Tab stops carry their alignment.** `w:tab w:val="right"` says the text ends
+  at the stop. Stops are measured from the text margin rather than the paragraph
+  indent, and the indent is itself an implicit stop.
+- **Line height no longer has an 11 pt floor**, which rounded every smaller line
+  up and drifted 10 pt contents down the page.
+- **Multi-level list labels.** `w:lvlText` is substituted at every level, and
+  `w:startOverride` and `w:suff` are honoured.
+- **`w:vanish` text is not rendered.** Hidden paragraphs were being drawn.
+- **Headers and footers sit at the `w:header` and `w:footer` offsets** the
+  section declares rather than at a fixed 24 px.
+- **PPTX group shapes.** `p:grpSp` was not read, so every child of every group
+  was placed at its raw offset instead of being mapped through
+  `a:chOff`/`a:chExt`.
+- **PPTX shape rotation.** `a:xfrm rot` reaches the display list.
+- **PPTX run styles inherit.** A run without `sz` now takes its paragraph's
+  `a:defRPr`, then the shape body's `a:lstStyle`, instead of a generic 18 pt.
+- **A word is measured without the space after it** when slide text wraps, so a
+  line ending at the box edge keeps its last word.
+
+Measured against the committed baseline, real corpus only; every synthetic
+fixture and both private workbooks are unchanged to the last recorded digit.
+
+| Document | Geometry | Exact text | p95 error |
+| --- | ---: | ---: | ---: |
+| `uk-ipo-one-way-nda.odt` | 0.8006 → **0.9533** | 1.0000 → 1.0000 | 35.29 → **1.73 px** |
+| `nasa-agency-report-2022.pptx` | 0.2527 → **0.3719** | 0.9452 → 0.9473 | 237.07 → **177.55 px** |
+| `nist-hb133-2026-chapter-2.docx` | 0.2536 → **0.2749** | 0.8030 → **0.8549** | 561.48 → **347.53 px** |
+
 ## [0.1.1] - 2026-08-13
 
 ### Changed

@@ -134,6 +134,71 @@
       "ratio": 1.0
     }
   },
+  "nasa-agency-report-2022.pptx": {
+    "pixel": {
+      "aligned_ssim": 0.7627593736738735,
+      "offset_x": 0.22727272727272727,
+      "offset_y": 0.18181818181818182,
+      "ink_density_ours": 0.39427507654030497,
+      "ink_density_reference": 0.7836462423953062
+    },
+    "text": {
+      "ours": 1446,
+      "reference": 1552,
+      "matched": 1420,
+      "mismatched_sources": 0,
+      "exact_text": 0.9472981987991995,
+      "geometry": 0.37186450827235773,
+      "combined": 0.3522665788837545,
+      "offset_x": 4.8407780028127325,
+      "offset_y": 1.1737703643485293,
+      "mean_error": 46.169007517394576,
+      "p95_error": 177.551573210711
+    },
+    "pagination": {
+      "ours": 11,
+      "reference": 11,
+      "ratio": 1.0
+    }
+  },
+  "nist-hb133-2026-chapter-2.docx": {
+    "pixel": {
+      "aligned_ssim": 0.6958283442264226,
+      "offset_x": 0.27941176470588236,
+      "offset_y": -0.3235294117647059,
+      "ink_density_ours": 0.06570068180179826,
+      "ink_density_reference": 0.07055359430704101
+    },
+    "text": {
+      "ours": 26338,
+      "reference": 25900,
+      "matched": 22328,
+      "mismatched_sources": 0,
+      "exact_text": 0.8548566177878173,
+      "geometry": 0.27491360592045005,
+      "combined": 0.2350117153410088,
+      "offset_x": -1.7621163707502077,
+      "offset_y": -17.560729429822924,
+      "mean_error": 77.053554281949,
+      "p95_error": 347.5320752285228
+    },
+    "pagination": {
+      "ours": 34,
+      "reference": 34,
+      "ratio": 1.0
+    }
+  },
+  "receipt.jpg": {
+    "pixel": {
+      "aligned_ssim": 1.0,
+      "offset_x": 0.0,
+      "offset_y": 0.0,
+      "ink_density_ours": 0.9562576822916666,
+      "ink_density_reference": 0.9562576822916666
+    },
+    "text": null,
+    "pagination": null
+  },
   "sheet-a.xlsx": {
     "pixel": {
       "aligned_ssim": 0.7339929256242701,
@@ -156,60 +221,6 @@
       "p95_error": 0.26611109774739705
     },
     "pagination": null
-  },
-  "nasa-agency-report-2022.pptx": {
-    "pixel": {
-      "aligned_ssim": 0.7544550703672018,
-      "offset_x": 0.3181818181818182,
-      "offset_y": 0.18181818181818182,
-      "ink_density_ours": 0.44338073883405493,
-      "ink_density_reference": 0.7836457741025229
-    },
-    "text": {
-      "ours": 1440,
-      "reference": 1552,
-      "matched": 1414,
-      "mismatched_sources": 0,
-      "exact_text": 0.9451871657754011,
-      "geometry": 0.2526924908603851,
-      "combined": 0.23884169924905382,
-      "offset_x": 17.36888028927569,
-      "offset_y": 0.39059377313242344,
-      "mean_error": 70.0861250519033,
-      "p95_error": 237.06681564275092
-    },
-    "pagination": {
-      "ours": 11,
-      "reference": 11,
-      "ratio": 1.0
-    }
-  },
-  "nist-hb133-2026-chapter-2.docx": {
-    "pixel": {
-      "aligned_ssim": 0.6794219621379711,
-      "offset_x": 0.058823529411764705,
-      "offset_y": 0.25,
-      "ink_density_ours": 0.06571357958777876,
-      "ink_density_reference": 0.07055359430704101
-    },
-    "text": {
-      "ours": 26350,
-      "reference": 25900,
-      "matched": 20978,
-      "mismatched_sources": 0,
-      "exact_text": 0.8029856459330144,
-      "geometry": 0.25356996137793236,
-      "combined": 0.20361303922626853,
-      "offset_x": -4.437449143699612,
-      "offset_y": 140.11709691006482,
-      "mean_error": 117.96552330503906,
-      "p95_error": 561.4816429852431
-    },
-    "pagination": {
-      "ours": 34,
-      "reference": 34,
-      "ratio": 1.0
-    }
   },
   "sheet-b.xlsx": {
     "pixel": {
@@ -234,23 +245,12 @@
     },
     "pagination": null
   },
-  "receipt.jpg": {
-    "pixel": {
-      "aligned_ssim": 1.0,
-      "offset_x": 0.0,
-      "offset_y": 0.0,
-      "ink_density_ours": 0.9562576822916666,
-      "ink_density_reference": 0.9562576822916666
-    },
-    "text": null,
-    "pagination": null
-  },
   "uk-ipo-one-way-nda.odt": {
     "pixel": {
-      "aligned_ssim": 0.9345305413444619,
+      "aligned_ssim": 0.953810035577908,
       "offset_x": 0.0,
-      "offset_y": 1.0,
-      "ink_density_ours": 0.063836829426397,
+      "offset_y": 0.0,
+      "ink_density_ours": 0.06379435256857419,
       "ink_density_reference": 0.06737208157351103
     },
     "text": {
@@ -259,12 +259,12 @@
       "matched": 1122,
       "mismatched_sources": 0,
       "exact_text": 1.0,
-      "geometry": 0.8006404188978736,
-      "combined": 0.8006404188978736,
-      "offset_x": 0.01612995180595319,
-      "offset_y": 2.0567563982699797,
-      "mean_error": 13.161193446328177,
-      "p95_error": 35.292502415712995
+      "geometry": 0.9533370002193995,
+      "combined": 0.9533370002193995,
+      "offset_x": 0.038763786088233575,
+      "offset_y": 0.9225913818039436,
+      "mean_error": 0.5836541981233132,
+      "p95_error": 1.7339038540651648
     },
     "pagination": {
       "ours": 2,

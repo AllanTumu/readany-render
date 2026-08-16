@@ -88,9 +88,10 @@ struct PagePublishBar {
     min_pagination_ratio: f64,
 }
 
-// These are hard regression floors rounded from the 2026-08-13 measurements.
-// They describe the evidence we currently have; they are not claims that the
-// low-scoring real documents are publication-ready.
+// These are hard regression floors rounded from the 2026-08-16 measurements
+// taken after the flow-table and slide-placement round. They describe the
+// evidence we currently have; they are not claims that the low-scoring real
+// documents are publication-ready.
 const PAGE_PUBLISH_BARS: &[PagePublishBar] = &[
     PagePublishBar {
         name: "basic.docx",
@@ -124,20 +125,20 @@ const PAGE_PUBLISH_BARS: &[PagePublishBar] = &[
     },
     PagePublishBar {
         name: "nist-hb133-2026-chapter-2.docx",
-        min_exact_text: 0.80,
-        max_p95_error_px: 562.0,
+        min_exact_text: 0.85,
+        max_p95_error_px: 350.0,
         min_pagination_ratio: 1.0,
     },
     PagePublishBar {
         name: "nasa-agency-report-2022.pptx",
-        min_exact_text: 0.87,
-        max_p95_error_px: 238.0,
+        min_exact_text: 0.94,
+        max_p95_error_px: 180.0,
         min_pagination_ratio: 1.0,
     },
     PagePublishBar {
         name: "uk-ipo-one-way-nda.odt",
         min_exact_text: 0.99,
-        max_p95_error_px: 36.0,
+        max_p95_error_px: 2.5,
         min_pagination_ratio: 1.0,
     },
 ];

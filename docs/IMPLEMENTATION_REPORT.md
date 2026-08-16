@@ -17,15 +17,15 @@ page, and JPEG honours EXIF orientation.
 | XLSX / XLSM | Natural-sheet display list plus bounded viewport raster/item APIs; cached values, geometry, merges, gridline view settings, opt-in headers, frozen-pane pixel extents, explicit styles, number formats, and omissions covered | Exhaustive exact cell text 1.000000 on both real sheets; text fidelity 0.978372 and 0.967207 across five distributed viewports |
 | ODS | Natural-sheet display list and viewport APIs; ODF styles, repeats, spans, gridline settings, opt-in headers, frozen-pane pixel extents, and explicit cell paint covered | Parser/golden/raster tests; no honest real ODS visual score currently claimed |
 | CSV / TSV | Encoding and separator sniffing plus RFC 4180 quoting | Parser/raster tests |
-| DOCX | Style cascade, shaping, pagination, lists, table paint, repeating parts, and images | Real NIST chapter: 0.802986 exact text, 561.48 px p95, and 34/34 pages; pagination fixed, residual placement drift remains |
-| ODT | Default/named/automatic styles, page geometry, lists, inherited spans, empty paragraphs, and images | Real UK IPO agreement: 1.000000 exact text, 35.29 px p95, and 2/2 pages |
+| DOCX | Style cascade, shaping, pagination, multi-level lists, hidden text, aligned tab stops, column-laid-out tables with declared rules, repeating parts, and images | Real NIST chapter: 0.854857 exact text, 347.53 px p95, and 34/34 pages; table columns agree with LibreOffice to 0.2 px, residual vertical flow drift remains |
+| ODT | Default/named/automatic styles, page geometry, lists, inherited spans, empty paragraphs, and images | Real UK IPO agreement: 1.000000 exact text, 1.73 px p95, and 2/2 pages |
 | RTF | Scoped token stream, destinations, codepages, Unicode fallback, and formatting | Synthetic `basic.rtf` only: 1.000000 exact text and 8.07 px p95 |
-| PPTX | Relationships, dual-key layout/master placeholder geometry, rich-text line layout, visual reading order, shapes, connectors, and images | Real NASA deck: 11/11 slides, 0.945187 exact text, 237.07 px p95, and two named unsupported EMFs; residual placement drift remains |
+| PPTX | Relationships, dual-key layout/master placeholder geometry, group transforms, shape rotation, three-level run style inheritance, rich-text line layout, visual reading order, shapes, connectors, and images | Real NASA deck: 11/11 slides, 0.947298 exact text, 177.55 px p95, and two named unsupported EMFs; residual drift is in grouped and tabular frames |
 | ODP | Masters, named styles, explicit geometry, shapes, autofit, and images | Synthetic `basic.odp` only: 1.000000 exact text and 4.97 px p95 |
 | PDF / HEIC | Deliberate `DelegateToHost`; no misleading partial page | Official CFPB sample statement pins the PDF contract |
 | PNG / JPEG / GIF / BMP / WebP | Single inspectable image page with pixel ceiling and orientation | Photographed receipt pixel diagnostic is exact |
 
-The page-shaped text-fidelity mean is **0.615785**. The real spreadsheet mean is
+The page-shaped text-fidelity mean is **0.652975**. The real spreadsheet mean is
 **0.972789**. Exact cell text is **1.000000** for both the two real workbooks; sampled
 mean / p95 box errors are 0.26 / 0.27 px and 0.45 / 3.27 px. See
 `docs/FIDELITY.md` for the scoring definition and sampling boundary.
