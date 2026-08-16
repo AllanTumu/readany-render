@@ -681,6 +681,24 @@ fn a_grouped_shape_is_placed_through_the_transform_its_group_declares() {
     );
 }
 
+/// A run that declares no size of its own takes its paragraph's `a:defRPr`,
+/// which in turn overrides the shape body's `a:lstStyle`.
+///
+/// The fixture sets 10 pt on the body and 36 pt on the paragraph, and the run
+/// asks for neither, so 36 pt — 48 px — is the answer.
+///
+/// **Falsified** by reading only `a:rPr`: the run falls back to the generic
+/// 18 pt presentation default and is drawn at 24 px, half size.
+#[test]
+fn a_run_without_a_size_inherits_its_paragraph_default_over_the_body_default() {
+    let run = slide_run("Inherited size");
+    assert!(
+        (run.size_px - 48.0).abs() < 0.01,
+        "the paragraph's 36 pt wins over the body's 10 pt: {}",
+        run.size_px
+    );
+}
+
 /// `a:xfrm rot` is carried into the display list so a turned text box is not
 /// drawn flat.
 ///

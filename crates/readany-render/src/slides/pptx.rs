@@ -334,6 +334,12 @@ fn parse_slide(
     let mut run = None::<SlideRun>;
     let mut in_t = false;
     let mut in_run_properties = false;
+    let mut in_paragraph_properties = false;
+    let mut in_list_style = false;
+    let mut in_first_level = false;
+    let mut target = StyleTarget::None;
+    let mut body_default = default_style.clone();
+    let mut paragraph_default = default_style.clone();
     let mut in_shape_properties = false;
     let mut placeholder = None::<Placeholder>;
     let mut explicit_geometry = false;
@@ -356,6 +362,8 @@ fn parse_slide(
                 text_body = TextBody::default();
                 paragraph = None;
                 run = None;
+                body_default = default_style.clone();
+                paragraph_default = default_style.clone();
                 shape_index = shape_index.saturating_add(1);
                 placeholder = None;
                 explicit_geometry = false;
@@ -414,28 +422,59 @@ fn parse_slide(
             Ok(Event::End(s)) if xml::local_name(s.name().as_ref()) == b"spPr" => {
                 in_shape_properties = false
             }
-            Ok(Event::Start(s))
-                if matches!(xml::local_name(s.name().as_ref()), b"rPr" | b"defRPr") =>
-            {
-                in_run_properties = true;
-                apply_run_properties(&s, &mut run, &default_style);
+            Ok(Event::Start(s)) if xml::local_name(s.name().as_ref()) == b"lstStyle" => {
+                in_list_style = true
             }
-            Ok(Event::Empty(s))
+            Ok(Event::End(s)) if xml::local_name(s.name().as_ref()) == b"lstStyle" => {
+                in_list_style = false
+            }
+            Ok(Event::Start(s)) if xml::local_name(s.name().as_ref()) == b"lvl1pPr" => {
+                in_first_level = true
+            }
+            Ok(Event::End(s)) if xml::local_name(s.name().as_ref()) == b"lvl1pPr" => {
+                in_first_level = false
+            }
+            Ok(Event::Empty(s)) | Ok(Event::Start(s))
                 if matches!(xml::local_name(s.name().as_ref()), b"rPr" | b"defRPr") =>
             {
-                apply_run_properties(&s, &mut run, &default_style);
+                target = style_target(
+                    xml::local_name(s.name().as_ref()) == b"rPr",
+                    in_paragraph_properties,
+                    in_list_style && in_first_level,
+                );
+                if target == StyleTarget::Run {
+                    in_run_properties = true;
+                    run.get_or_insert_with(|| SlideRun {
+                        text: String::new(),
+                        style: paragraph_default.clone(),
+                    });
+                }
+                if let Some(style) = resolve_target(
+                    target,
+                    run.as_mut(),
+                    &mut paragraph_default,
+                    &mut body_default,
+                ) {
+                    apply_run_properties(&s, style);
+                }
             }
             Ok(Event::End(s))
                 if matches!(xml::local_name(s.name().as_ref()), b"rPr" | b"defRPr") =>
             {
-                in_run_properties = false
+                in_run_properties = false;
+                target = StyleTarget::None;
             }
             Ok(Event::Empty(s)) | Ok(Event::Start(s))
                 if xml::local_name(s.name().as_ref()) == b"latin" =>
             {
                 if let Some(family) = attr(&s, b"typeface").filter(|value| !value.is_empty()) {
-                    if let Some(run) = run.as_mut() {
-                        run.style.family = family;
+                    if let Some(style) = resolve_target(
+                        target,
+                        run.as_mut(),
+                        &mut paragraph_default,
+                        &mut body_default,
+                    ) {
+                        style.family = family;
                     }
                 }
             }
@@ -445,8 +484,13 @@ fn parse_slide(
                 if let Some(colour) = attr(&s, b"val").and_then(|value| rgb(&value)) {
                     if in_shape_properties && !in_run_properties {
                         fill = Some(colour);
-                    } else if let Some(run) = run.as_mut() {
-                        run.style.colour = Some(colour);
+                    } else if let Some(style) = resolve_target(
+                        target,
+                        run.as_mut(),
+                        &mut paragraph_default,
+                        &mut body_default,
+                    ) {
+                        style.colour = Some(colour);
                     }
                 }
             }
@@ -491,29 +535,28 @@ fn parse_slide(
             }
             Ok(Event::Start(s)) if xml::local_name(s.name().as_ref()) == b"p" => {
                 finish_slide_paragraph(&mut text_body, &mut paragraph, &mut run);
+                paragraph_default = body_default.clone();
                 paragraph = Some(SlideParagraph::default());
             }
             Ok(Event::Empty(s)) if xml::local_name(s.name().as_ref()) == b"p" => {
                 finish_slide_paragraph(&mut text_body, &mut paragraph, &mut run);
                 text_body.paragraphs.push(SlideParagraph::default());
             }
-            Ok(Event::Empty(s)) | Ok(Event::Start(s))
-                if xml::local_name(s.name().as_ref()) == b"pPr" =>
-            {
-                if let Some(paragraph) = paragraph.as_mut() {
-                    paragraph.alignment = match attr(&s, b"algn").as_deref() {
-                        Some("ctr") => TextAlignment::Centre,
-                        Some("r") => TextAlignment::Right,
-                        Some("l") | Some("just") | Some("dist") | None => TextAlignment::Left,
-                        Some(_) => TextAlignment::Left,
-                    };
-                }
+            Ok(Event::End(s)) if xml::local_name(s.name().as_ref()) == b"pPr" => {
+                in_paragraph_properties = false
+            }
+            Ok(Event::Start(s)) if xml::local_name(s.name().as_ref()) == b"pPr" => {
+                in_paragraph_properties = true;
+                apply_paragraph_alignment(&s, paragraph.as_mut());
+            }
+            Ok(Event::Empty(s)) if xml::local_name(s.name().as_ref()) == b"pPr" => {
+                apply_paragraph_alignment(&s, paragraph.as_mut());
             }
             Ok(Event::Start(s)) if matches!(xml::local_name(s.name().as_ref()), b"r" | b"fld") => {
                 finish_slide_run(&mut paragraph, &mut run);
                 run = Some(SlideRun {
                     text: String::new(),
-                    style: default_style.clone(),
+                    style: paragraph_default.clone(),
                 });
             }
             Ok(Event::Start(s)) if xml::local_name(s.name().as_ref()) == b"t" => in_t = true,
@@ -521,7 +564,7 @@ fn parse_slide(
             Ok(Event::Text(t)) if in_t => {
                 run.get_or_insert_with(|| SlideRun {
                     text: String::new(),
-                    style: default_style.clone(),
+                    style: paragraph_default.clone(),
                 })
                 .text
                 .push_str(&t.decode().map_err(|_| {
@@ -531,7 +574,7 @@ fn parse_slide(
             Ok(Event::GeneralRef(reference)) if in_t => {
                 run.get_or_insert_with(|| SlideRun {
                     text: String::new(),
-                    style: default_style.clone(),
+                    style: paragraph_default.clone(),
                 })
                 .text
                 .push_str(&xml::decode_reference(&reference)?);
@@ -760,22 +803,71 @@ fn unsupported_media_kind(target: &str) -> Option<String> {
     }
 }
 
-fn apply_run_properties(
-    start: &quick_xml::events::BytesStart<'_>,
-    run: &mut Option<SlideRun>,
-    default_style: &TextStyle,
-) {
-    let style = &mut run
-        .get_or_insert_with(|| SlideRun {
-            text: String::new(),
-            style: default_style.clone(),
-        })
-        .style;
+/// Which of the three nested text styles an `a:rPr`/`a:defRPr` is setting.
+///
+/// DrawingML declares run formatting at three levels: the run's own `a:rPr`,
+/// the paragraph's `a:pPr/a:defRPr`, and the shape body's
+/// `a:lstStyle/a:lvl1pPr/a:defRPr`. Only the first was read, so a run that
+/// omits `sz` — as the NASA deck's closing slide does — fell back to a generic
+/// 18 pt instead of the 36.07 pt its paragraph declares, and its text was drawn
+/// at little over half size.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum StyleTarget {
+    #[default]
+    None,
+    Run,
+    Paragraph,
+    Body,
+}
+
+fn style_target(is_run_property: bool, in_paragraph: bool, in_body_level_one: bool) -> StyleTarget {
+    match (is_run_property, in_paragraph, in_body_level_one) {
+        (true, _, _) => StyleTarget::Run,
+        (false, true, _) => StyleTarget::Paragraph,
+        (false, false, true) => StyleTarget::Body,
+        (false, false, false) => StyleTarget::None,
+    }
+}
+
+fn resolve_target<'a>(
+    target: StyleTarget,
+    run: Option<&'a mut SlideRun>,
+    paragraph_default: &'a mut TextStyle,
+    body_default: &'a mut TextStyle,
+) -> Option<&'a mut TextStyle> {
+    match target {
+        StyleTarget::Run => run.map(|run| &mut run.style),
+        StyleTarget::Paragraph => Some(paragraph_default),
+        StyleTarget::Body => Some(body_default),
+        StyleTarget::None => None,
+    }
+}
+
+/// Applies the attributes an `a:rPr` carries, leaving anything it omits alone
+/// so the level above still shows through.
+fn apply_run_properties(start: &quick_xml::events::BytesStart<'_>, style: &mut TextStyle) {
     if let Some(size) = attr(start, b"sz").and_then(|value| value.parse::<f32>().ok()) {
         style.size_px = size / 100.0 * 96.0 / 72.0;
     }
-    style.bold = attr(start, b"b").is_some_and(|value| value == "1");
-    style.italic = attr(start, b"i").is_some_and(|value| value == "1");
+    if let Some(bold) = attr(start, b"b") {
+        style.bold = bold == "1";
+    }
+    if let Some(italic) = attr(start, b"i") {
+        style.italic = italic == "1";
+    }
+}
+
+fn apply_paragraph_alignment(
+    start: &quick_xml::events::BytesStart<'_>,
+    paragraph: Option<&mut SlideParagraph>,
+) {
+    let Some(paragraph) = paragraph else { return };
+    paragraph.alignment = match attr(start, b"algn").as_deref() {
+        Some("ctr") => TextAlignment::Centre,
+        Some("r") => TextAlignment::Right,
+        Some("l") | Some("just") | Some("dist") | None => TextAlignment::Left,
+        Some(_) => TextAlignment::Left,
+    };
 }
 
 fn finish_slide_run(paragraph: &mut Option<SlideParagraph>, run: &mut Option<SlideRun>) {
