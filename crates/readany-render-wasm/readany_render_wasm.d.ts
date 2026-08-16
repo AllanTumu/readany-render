@@ -16,7 +16,12 @@ export interface PositionedGlyph {
 export type SourceRef =
   | { kind: "Cell"; sheet: number; row: number; column: number }
   | { kind: "Text"; paragraph: number; start: number; end: number }
-  | { kind: "Shape"; slide: number; shape: number };
+  | { kind: "Shape"; slide: number; shape: number }
+  // `table` counts tables in document order from zero, per document and not per
+  // page, so a table broken across a page boundary keeps one identity. `row`
+  // and `column` are zero-based grid positions: a cell spanning columns 4 to 6
+  // reports 4, and a vertically merged cell reports the row its merge began on.
+  | { kind: "TableCell"; table: number; row: number; column: number };
 export interface GlyphRun {
   font: number;
   family: string;

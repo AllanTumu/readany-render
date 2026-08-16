@@ -4,7 +4,7 @@ use crate::flow::styles::{
 };
 use crate::flow::{
     Border, BorderEdges, FlowBlock, FlowCell, FlowParagraph, FlowRow, FlowRun, FlowTable,
-    VerticalAlignment, VerticalMerge, layout_blocks,
+    ParagraphAnchor, VerticalAlignment, VerticalMerge, layout_blocks,
 };
 use crate::model::{Colour, ImageData, ImageItem, Item, Rect, Size, SourceRef, Unrendered};
 use crate::{Format, Options, RenderError};
@@ -22,23 +22,27 @@ pub(crate) fn render(bytes: &[u8], options: &Options<'_>) -> Result<crate::Rende
         archive.get("word/_rels/document.xml.rels"),
         "word/document.xml",
     )?;
-    let mut parsed = parse_part(document, &styles, &numbering)?;
+    // One counter for the whole document: the body, then its notes, then its
+    // repeating parts, so every table has an identity no other table shares.
+    let mut tables = 0_usize;
+    let mut parsed = parse_part(document, &styles, &numbering, &mut tables)?;
 
     for notes_name in ["word/footnotes.xml", "word/endnotes.xml"] {
         if let Some(notes) = archive.get(notes_name) {
             xml::validate(notes, &options.limits)?;
-            let notes = parse_part(notes, &styles, &numbering)?;
+            let notes = parse_part(notes, &styles, &numbering, &mut tables)?;
             parsed.blocks.extend(notes.blocks);
         }
     }
 
-    let mut rendered = layout_blocks(
+    let laid_out = layout_blocks(
         &parsed.blocks,
         Format::Docx,
         options,
         parsed.size,
         parsed.margins,
     )?;
+    let mut rendered = laid_out.rendered;
     paint_repeating_parts(
         &RepeatingPartContext {
             archive: &archive,
@@ -52,11 +56,13 @@ pub(crate) fn render(bytes: &[u8], options: &Options<'_>) -> Result<crate::Rende
         parsed.margins,
         parsed.header_offset,
         parsed.footer_offset,
+        &mut tables,
     )?;
     paint_images(
         &archive,
         &relationships.targets,
         &parsed.images,
+        &laid_out.anchors,
         &mut rendered,
         options.limits.image_pixels,
     )?;
@@ -92,6 +98,7 @@ fn paint_repeating_parts(
     margins: Margins,
     header_offset: f32,
     footer_offset: f32,
+    tables: &mut usize,
 ) -> Result<(), RenderError> {
     let parts = parse_repeating_parts(context.document, context.relationships)?;
     let names = parts.targets().map(str::to_owned).collect::<BTreeSet<_>>();
@@ -103,7 +110,7 @@ fn paint_repeating_parts(
         let Some(bytes) = context.archive.get(&name) else {
             continue;
         };
-        let parsed = parse_part(bytes, context.styles, context.numbering)?;
+        let parsed = parse_part(bytes, context.styles, context.numbering, tables)?;
         let header = name.starts_with("word/header");
         // A header starts `w:header` px below the top edge and may run down to
         // the text margin; a footer starts `w:footer` px above the bottom edge.
@@ -129,7 +136,7 @@ fn paint_repeating_parts(
             page_size,
             part_margins,
         )?;
-        if let Some(part_page) = part.pages.first() {
+        if let Some(part_page) = part.rendered.pages.first() {
             laid_out.insert(name, part_page.items.clone());
         }
     }
@@ -229,6 +236,7 @@ fn paint_images(
     archive: &Archive,
     relationships: &BTreeMap<String, String>,
     images: &[PendingImage],
+    anchors: &BTreeMap<u32, ParagraphAnchor>,
     rendered: &mut crate::Rendered,
     image_pixel_limit: u64,
 ) -> Result<(), RenderError> {
@@ -246,15 +254,13 @@ fn paint_images(
             .into_dimensions()
             .map_err(|_| RenderError::malformed("an embedded Word image has damaged dimensions"))?;
         check_image_pixels(pixel_width, pixel_height, image_pixel_limit)?;
-        let mut page_index = 0_usize;
-        let mut baseline = 96.0;
-        for (index, page) in rendered.pages.iter().enumerate() {
-            if let Some(y) = paragraph_baseline(&page.items, image.paragraph) {
-                page_index = index;
-                baseline = y;
-                break;
-            }
-        }
+        // Layout recorded where every paragraph came to rest, including the
+        // ones holding nothing but this drawing. Searching the finished pages
+        // for a glyph instead could not answer for those, and both images in
+        // the NIST chapter fell back to the top of page one.
+        let anchor = anchors.get(&image.paragraph);
+        let page_index = anchor.map(|anchor| anchor.page).unwrap_or(0);
+        let baseline = anchor.map(|anchor| anchor.baseline).unwrap_or(96.0);
         let Some(page) = rendered.pages.get_mut(page_index) else {
             continue;
         };
@@ -277,11 +283,15 @@ fn paint_images(
                 width,
                 height,
             },
-            source: Some(SourceRef::Text {
-                paragraph: image.paragraph,
-                start: 0,
-                end: 0,
-            }),
+            // An image in a cell is addressed by that cell, exactly as the
+            // text beside it is.
+            source: Some(anchor.and_then(|anchor| anchor.cell.clone()).unwrap_or(
+                SourceRef::Text {
+                    paragraph: image.paragraph,
+                    start: 0,
+                    end: 0,
+                },
+            )),
         }));
     }
     Ok(())
@@ -295,24 +305,6 @@ fn check_image_pixels(width: u32, height: u32, limit: u64) -> Result<(), RenderE
         return Err(RenderError::limit("image_pixels", pixels));
     }
     Ok(())
-}
-
-fn paragraph_baseline(items: &[Item], paragraph: u32) -> Option<f32> {
-    for item in items {
-        match item {
-            Item::Glyphs(run) if matches!(run.source, Some(SourceRef::Text { paragraph: value, .. }) if value == paragraph) =>
-            {
-                return Some(run.origin.y);
-            }
-            Item::Group(group) => {
-                if let Some(y) = paragraph_baseline(&group.items, paragraph) {
-                    return Some(y);
-                }
-            }
-            Item::Glyphs(_) | Item::Path(_) | Item::Image(_) => {}
-        }
-    }
-    None
 }
 
 fn mime_for(path: &str) -> &'static str {
@@ -435,7 +427,7 @@ impl TableBuilder {
     /// what an auto-width table written by a converter looks like — falls back
     /// to the widest `w:tcW` seen in each column so the columns still line up
     /// with each other.
-    fn finish(self) -> FlowTable {
+    fn finish(self, index: usize) -> FlowTable {
         let mut columns = self.grid;
         for row in &self.rows {
             for cell in &row.cells {
@@ -463,6 +455,10 @@ impl TableBuilder {
             }
         }
         let last_column = columns.len();
+        // Where each grid column's current vertical merge began, so a
+        // `w:vMerge` continuation can report the row that owns it rather than
+        // the row it happens to be drawn in.
+        let mut merge_origin = BTreeMap::<usize, usize>::new();
         let rows = self
             .rows
             .into_iter()
@@ -476,6 +472,18 @@ impl TableBuilder {
                         let span = cell.span.max(1);
                         let first_column = cell.column == 0;
                         let last = cell.column.saturating_add(span) >= last_column;
+                        // A continuation belongs to the row its merge started
+                        // in. A continuation with nothing above it — malformed,
+                        // but readable — owns itself rather than being dropped.
+                        let origin_row = match cell.merge {
+                            VerticalMerge::Continue => {
+                                *merge_origin.entry(cell.column).or_insert(row_index)
+                            }
+                            VerticalMerge::Start | VerticalMerge::None => {
+                                merge_origin.insert(cell.column, row_index);
+                                row_index
+                            }
+                        };
                         FlowCell {
                             borders: BorderEdges {
                                 top: cell.overrides.top.unwrap_or(if first_row {
@@ -499,6 +507,7 @@ impl TableBuilder {
                             column: cell.column,
                             span,
                             merge: cell.merge,
+                            origin_row,
                             vertical_alignment: cell.vertical_alignment,
                             shading: cell.shading,
                         }
@@ -524,6 +533,7 @@ impl TableBuilder {
             }
         }
         FlowTable {
+            index,
             rows,
             columns,
             indent: self.indent,
@@ -579,10 +589,17 @@ enum TableScope {
     Ignored,
 }
 
+/// Parses one part of the package — the body, a note store, a header or a
+/// footer.
+///
+/// `tables` is the document-wide table counter, advanced rather than reset, so
+/// a table in a header cannot collide with the first table in the body. See
+/// [`crate::SourceRef::TableCell`] for why the sequence is per document.
 fn parse_part(
     bytes: &[u8],
     styles: &StyleSheet,
     numbering: &Numbering,
+    tables: &mut usize,
 ) -> Result<ParsedDocument, RenderError> {
     let mut reader = quick_xml::Reader::from_reader(bytes);
     let mut blocks = Vec::<FlowBlock>::new();
@@ -855,7 +872,9 @@ fn parse_part(
                 }
                 b"tbl" => {
                     if table_depth == 1 && !table.rows.is_empty() {
-                        blocks.push(FlowBlock::Table(std::mem::take(&mut table).finish()));
+                        let index = *tables;
+                        *tables = tables.saturating_add(1);
+                        blocks.push(FlowBlock::Table(std::mem::take(&mut table).finish(index)));
                     }
                     table_depth = table_depth.saturating_sub(1);
                 }

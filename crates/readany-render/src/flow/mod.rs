@@ -6,6 +6,7 @@ pub(crate) mod styles;
 use crate::model::*;
 use crate::text::{TextStyle, measure, shape};
 use crate::{Format, Options, RenderError};
+use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum Alignment {
@@ -155,6 +156,11 @@ pub(crate) struct FlowCell {
     /// `w:gridSpan`, at least 1.
     pub span: usize,
     pub merge: VerticalMerge,
+    /// The row this cell's content is addressed by. For a `w:vMerge`
+    /// continuation that is the row the merge began on, so every box of one
+    /// merged cell answers to a single address; for every other cell it is the
+    /// row the cell is in.
+    pub origin_row: usize,
     pub vertical_alignment: VerticalAlignment,
     /// Resolved per cell, because `w:tcBorders` overrides `w:tblBorders` and
     /// an interior edge is a different rule from an outer one.
@@ -171,6 +177,10 @@ pub(crate) struct FlowRow {
 
 #[derive(Clone, Debug)]
 pub(crate) struct FlowTable {
+    /// This table's position in document order, counted from zero across the
+    /// whole document rather than per page or per part. See
+    /// [`SourceRef::TableCell`] for why.
+    pub index: usize,
     pub rows: Vec<FlowRow>,
     /// Resolved grid column widths in pixels, one entry per `w:gridCol`.
     pub columns: Vec<f32>,
@@ -189,6 +199,24 @@ pub(crate) enum FlowBlock {
     Table(FlowTable),
 }
 
+/// Where a paragraph came to rest, so an image anchored to it can be placed
+/// beside it and labelled with whatever cell it landed in.
+///
+/// Layout is the only pass that knows both, and it used to be asked afterwards
+/// by scanning the finished pages for a glyph carrying the paragraph's
+/// `SourceRef::Text`. That search cannot answer for a paragraph holding only a
+/// drawing — it has no glyph — which is why both images in the NIST chapter
+/// fell back to the top of page one; and once a cell's runs are labelled
+/// `TableCell` it cannot answer for a paragraph inside a table either.
+#[derive(Clone, Debug)]
+pub(crate) struct ParagraphAnchor {
+    pub page: usize,
+    /// Baseline of the paragraph's first line.
+    pub baseline: f32,
+    /// The cell the paragraph was laid out in, if it was in one.
+    pub cell: Option<SourceRef>,
+}
+
 pub(crate) fn layout_flow(
     paragraphs: &[FlowParagraph],
     format: Format,
@@ -201,7 +229,13 @@ pub(crate) fn layout_flow(
         .cloned()
         .map(FlowBlock::Paragraph)
         .collect::<Vec<_>>();
-    layout_blocks(&blocks, format, options, page_size, margins)
+    layout_blocks(&blocks, format, options, page_size, margins).map(|laid_out| laid_out.rendered)
+}
+
+/// A finished layout together with what it learned on the way.
+pub(crate) struct LaidOut {
+    pub rendered: Rendered,
+    pub anchors: BTreeMap<u32, ParagraphAnchor>,
 }
 
 /// Running state of the page flow, shared by paragraphs and by the rows of a
@@ -212,6 +246,7 @@ struct FlowCursor<'a, 'font> {
     page_size: Size,
     margins: (f32, f32, f32, f32),
     options: &'a Options<'font>,
+    anchors: BTreeMap<u32, ParagraphAnchor>,
 }
 
 impl FlowCursor<'_, '_> {
@@ -243,13 +278,14 @@ pub(crate) fn layout_blocks(
     options: &Options<'_>,
     page_size: Size,
     margins: (f32, f32, f32, f32),
-) -> Result<Rendered, RenderError> {
+) -> Result<LaidOut, RenderError> {
     let mut cursor = FlowCursor {
         pages: vec![new_page(page_size, 1)],
         y: margins.1,
         page_size,
         margins,
         options,
+        anchors: BTreeMap::new(),
     };
     let mut paragraph_index = 0_u32;
     let mut pending_page_break = false;
@@ -270,11 +306,14 @@ pub(crate) fn layout_blocks(
             }
         }
     }
-    Ok(Rendered {
-        pages: cursor.pages,
-        format,
-        unrendered: Vec::new(),
-        meta: Meta::default(),
+    Ok(LaidOut {
+        rendered: Rendered {
+            pages: cursor.pages,
+            format,
+            unrendered: Vec::new(),
+            meta: Meta::default(),
+        },
+        anchors: cursor.anchors,
     })
 }
 
@@ -359,6 +398,18 @@ fn layout_page_paragraph(
             }
             let range_end = range.end;
             let y = cursor.y;
+            let baseline = y + baseline_offset(paragraph, range.clone(), height);
+            if line_index == 0 {
+                let page = cursor.pages.len().saturating_sub(1);
+                cursor.anchors.insert(
+                    paragraph_index,
+                    ParagraphAnchor {
+                        page,
+                        baseline,
+                        cell: None,
+                    },
+                );
+            }
             paint_paragraph_line(
                 cursor.items()?,
                 &ParagraphLine {
@@ -372,6 +423,7 @@ fn layout_page_paragraph(
                     box_width,
                     y,
                     height,
+                    cell: None,
                 },
             );
             cursor.y += height;
@@ -399,6 +451,10 @@ struct ParagraphLine<'a> {
     box_width: f32,
     y: f32,
     height: f32,
+    /// The table cell this line sits in. Every item painted for it is labelled
+    /// with this instead of `SourceRef::Text`, so a row can be highlighted by
+    /// address the way a spreadsheet row can.
+    cell: Option<SourceRef>,
 }
 
 fn paint_paragraph_line(items: &mut Vec<Item>, line: &ParagraphLine<'_>) {
@@ -437,6 +493,7 @@ fn paint_paragraph_line(items: &mut Vec<Item>, line: &ParagraphLine<'_>) {
         baseline,
         justify_extra,
         line.origin_x,
+        line.cell.as_ref(),
     );
 }
 
@@ -447,8 +504,9 @@ fn layout_cell(
     origin_x: f32,
     width: f32,
     first_paragraph_index: u32,
-) -> (Vec<Item>, f32) {
-    let mut items = Vec::new();
+    cell: &SourceRef,
+) -> LaidOutCell {
+    let mut laid_out = LaidOutCell::default();
     let mut y = 0.0_f32;
     for (offset, paragraph) in paragraphs.iter().enumerate() {
         let text = paragraph.text();
@@ -457,28 +515,46 @@ fn layout_cell(
         if offset > 0 {
             y += paragraph.style.before;
         }
+        let paragraph_index = first_paragraph_index.saturating_add(offset as u32);
         for (line_index, range) in lines.into_iter().enumerate() {
             let height = line_height(paragraph, range.clone());
+            if line_index == 0 {
+                laid_out.baselines.push((
+                    paragraph_index,
+                    y + baseline_offset(paragraph, range.clone(), height),
+                ));
+            }
             paint_paragraph_line(
-                &mut items,
+                &mut laid_out.items,
                 &ParagraphLine {
                     paragraph,
                     text: &text,
                     range,
-                    paragraph_index: first_paragraph_index.saturating_add(offset as u32),
+                    paragraph_index,
                     line_index,
                     line_count,
                     origin_x,
                     box_width: width,
                     y,
                     height,
+                    cell: Some(cell.clone()),
                 },
             );
             y += height;
         }
         y += paragraph.style.after;
     }
-    (items, y)
+    laid_out.height = y;
+    laid_out
+}
+
+#[derive(Default)]
+struct LaidOutCell {
+    items: Vec<Item>,
+    height: f32,
+    /// First-line baselines, relative to the cell's top, so an anchored image
+    /// can be placed once the row's height has moved the cell into place.
+    baselines: Vec<(u32, f32)>,
 }
 
 fn translate(items: &mut [Item], dy: f32) {
@@ -508,7 +584,7 @@ fn translate(items: &mut [Item], dy: f32) {
     }
 }
 
-fn edge_path(from: Point, to: Point, border: Border) -> Item {
+fn edge_path(from: Point, to: Point, border: Border, source: SourceRef) -> Item {
     Item::Path(PathItem {
         path: Path {
             commands: vec![PathCommand::Move(from), PathCommand::Line(to)],
@@ -521,7 +597,9 @@ fn edge_path(from: Point, to: Point, border: Border) -> Item {
             width: border.width,
             dash: Vec::new(),
         }),
-        source: None,
+        // A rule belongs to the cell it bounds. Labelling only the text would
+        // highlight a row's words and leave its box behind.
+        source: Some(source),
     })
 }
 
@@ -566,14 +644,22 @@ fn layout_table(
             let cell_index = paragraph_index;
             paragraph_index =
                 paragraph_index.saturating_add(u32::try_from(cell.paragraphs.len()).unwrap_or(0));
-            let (items, height) = layout_cell(
+            // The grid address, not the visual one: the first column the cell
+            // spans, and the row its merge began on.
+            let address = SourceRef::TableCell {
+                table: table.index,
+                row: cell.origin_row,
+                column: cell.column,
+            };
+            let laid_out_cell = layout_cell(
                 &cell.paragraphs,
                 left + table.cell_margin_left,
                 width,
                 cell_index,
+                &address,
             );
-            content_height = content_height.max(height);
-            laid_out.push((cell, left, right, items, height));
+            content_height = content_height.max(laid_out_cell.height);
+            laid_out.push((cell, left, right, address, laid_out_cell));
         }
         let row_height = content_height.max(row.minimum_height).max(1.0)
             + table.cell_margin_top
@@ -583,10 +669,15 @@ fn layout_table(
         }
         let top = cursor.y;
         let bottom = top + row_height;
+        let page = cursor.pages.len().saturating_sub(1);
+        let mut anchors = Vec::new();
         let items = cursor.items()?;
-        for (cell, left, right, mut cell_items, height) in laid_out {
-            let free =
-                (row_height - table.cell_margin_top - table.cell_margin_bottom - height).max(0.0);
+        for (cell, left, right, address, mut laid_out_cell) in laid_out {
+            let free = (row_height
+                - table.cell_margin_top
+                - table.cell_margin_bottom
+                - laid_out_cell.height)
+                .max(0.0);
             let dy = top
                 + table.cell_margin_top
                 + match cell.vertical_alignment {
@@ -594,7 +685,17 @@ fn layout_table(
                     VerticalAlignment::Centre => free / 2.0,
                     VerticalAlignment::Bottom => free,
                 };
-            translate(&mut cell_items, dy);
+            translate(&mut laid_out_cell.items, dy);
+            for (paragraph, baseline) in laid_out_cell.baselines {
+                anchors.push((
+                    paragraph,
+                    ParagraphAnchor {
+                        page,
+                        baseline: baseline + dy,
+                        cell: Some(address.clone()),
+                    },
+                ));
+            }
             if let Some(colour) = cell.shading {
                 items.push(Item::Path(PathItem {
                     path: rect_path(Rect {
@@ -605,10 +706,10 @@ fn layout_table(
                     }),
                     fill: Some(Paint { colour }),
                     stroke: None,
-                    source: None,
+                    source: Some(address.clone()),
                 }));
             }
-            items.append(&mut cell_items);
+            items.append(&mut laid_out_cell.items);
             let corners = [
                 (Point { x: left, y: top }, Point { x: right, y: top }),
                 (Point { x: left, y: top }, Point { x: left, y: bottom }),
@@ -643,10 +744,11 @@ fn layout_table(
             .zip(corners)
             {
                 if let Some(border) = border {
-                    items.push(edge_path(from, to, border));
+                    items.push(edge_path(from, to, border, address.clone()));
                 }
             }
         }
+        cursor.anchors.extend(anchors);
         cursor.y = bottom;
     }
     Ok(paragraph_index)
@@ -817,6 +919,7 @@ fn paint_line(
     baseline: f32,
     justify_extra: f32,
     tab_origin: f32,
+    cell: Option<&SourceRef>,
 ) {
     let segments = tab_segments(paragraph, full_text, range);
     for (segment_index, segment) in segments.iter().enumerate() {
@@ -826,10 +929,16 @@ fn paint_line(
             *x = tab_origin + tab_start(cursor, segment, stop);
         }
         for (start, end, style) in &segment.parts {
-            let source = SourceRef::Text {
-                paragraph: paragraph_index,
-                start: u32::try_from(*start).unwrap_or(u32::MAX),
-                end: u32::try_from(*end).unwrap_or(u32::MAX),
+            // Inside a table the cell address is the useful one: a paragraph
+            // index and a character range cannot be matched against a data row.
+            // Outside one, nothing changes.
+            let source = match cell {
+                Some(cell) => cell.clone(),
+                None => SourceRef::Text {
+                    paragraph: paragraph_index,
+                    start: u32::try_from(*start).unwrap_or(u32::MAX),
+                    end: u32::try_from(*end).unwrap_or(u32::MAX),
+                },
             };
             let Some(part) = full_text.get(*start..*end) else {
                 continue;

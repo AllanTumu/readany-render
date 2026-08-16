@@ -142,7 +142,12 @@ fn widest_run(items: &[Item], column: u32) -> f32 {
 fn cell_column(source: Option<&SourceRef>) -> Option<u32> {
     match source {
         Some(SourceRef::Cell { column, .. }) => Some(*column),
-        Some(SourceRef::Text { .. }) | Some(SourceRef::Shape { .. }) | None => None,
+        // Only a spreadsheet cell has a sheet column. A table cell has a
+        // column of its own table, which is not this grid's.
+        Some(SourceRef::Text { .. })
+        | Some(SourceRef::Shape { .. })
+        | Some(SourceRef::TableCell { .. })
+        | None => None,
     }
 }
 

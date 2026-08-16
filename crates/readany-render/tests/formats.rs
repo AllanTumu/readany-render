@@ -1320,3 +1320,292 @@ fn pptx_text_shapes_follow_visual_reading_order() {
         "the footer precedes the page number"
     );
 }
+
+/// Every item of a rendered document, flattened out of its groups.
+fn flat_items(bytes: &[u8], filename: &str) -> Vec<Item> {
+    let rendered = render(
+        bytes,
+        &Options {
+            filename: Some(filename),
+            ..Options::default()
+        },
+    )
+    .unwrap_or_else(|error| panic!("{filename} renders: {error}"));
+    fn walk(items: &[Item], out: &mut Vec<Item>) {
+        for item in items {
+            out.push(item.clone());
+            if let Item::Group(group) = item {
+                walk(&group.items, out);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for page in &rendered.pages {
+        walk(&page.items, &mut out);
+    }
+    out
+}
+
+fn item_source(item: &Item) -> Option<&readany_render::SourceRef> {
+    match item {
+        Item::Glyphs(run) => run.source.as_ref(),
+        Item::Path(path) => path.source.as_ref(),
+        Item::Image(image) => image.source.as_ref(),
+        Item::Group(group) => group.source.as_ref(),
+        _ => None,
+    }
+}
+
+/// The address of the cell an item belongs to, if it belongs to one.
+fn table_cell(item: &Item) -> Option<(usize, usize, usize)> {
+    match item_source(item) {
+        Some(readany_render::SourceRef::TableCell { table, row, column }) => {
+            Some((*table, *row, *column))
+        }
+        _ => None,
+    }
+}
+
+/// The text of the run addressed by one cell of the generated feature document.
+fn feature_cell_text(table: usize, row: usize, column: usize) -> Option<String> {
+    flat_items(&fixture("flow-features.docx"), "flow-features.docx")
+        .iter()
+        .find_map(|item| match (item, table_cell(item)) {
+            (Item::Glyphs(run), Some(address)) if address == (table, row, column) => {
+                Some(run.text.clone())
+            }
+            _ => None,
+        })
+}
+
+/// A Word table cell is addressable the way a spreadsheet cell is: every glyph
+/// and every rule inside the corpus chapter's tables carries a table, row and
+/// column, and text outside a table still carries its paragraph.
+///
+/// **Falsified** by passing `None` as the cell to `paint_line` and dropping the
+/// source from `edge_path`: the `TableCell` count falls to zero and the rules
+/// go back to carrying nothing at all.
+#[test]
+fn every_glyph_and_rule_inside_a_word_table_is_addressed_by_its_cell() {
+    let items = flat_items(
+        &real_corpus("nist-hb133-2026-chapter-2.docx"),
+        "nist-hb133-2026-chapter-2.docx",
+    );
+    let addressed = items
+        .iter()
+        .filter(|item| table_cell(item).is_some())
+        .count();
+    assert!(
+        addressed > 400,
+        "the chapter's tables carry hundreds of addressed items, not {addressed}"
+    );
+
+    // Every rule this document draws is a cell rule; there is no other source
+    // of paths in a flow document. A rule without an address would highlight a
+    // row's words and leave its box behind.
+    let unaddressed_rules = items
+        .iter()
+        .filter(|item| matches!(item, Item::Path(_)) && table_cell(item).is_none())
+        .count();
+    assert_eq!(
+        unaddressed_rules, 0,
+        "every cell rule carries the address of the cell it bounds"
+    );
+
+    assert!(
+        items.iter().any(|item| matches!(
+            item_source(item),
+            Some(readany_render::SourceRef::Text { .. })
+        )),
+        "text outside a table still reports its paragraph and character range"
+    );
+}
+
+/// A cell spanning several columns reports the first one it covers, and the
+/// cells beside it keep their own grid positions.
+///
+/// The generated table's grid is 2160 + 2880 twips; its header spans both
+/// columns and the row below fills them separately.
+///
+/// **Falsified** by addressing a cell by its position in the row rather than by
+/// `cell.column`: the right-hand cell of the second row reports column 1 either
+/// way, but the sub-header rows of the corpus chapter — where a spanned cell
+/// precedes single ones — then report one column too few.
+#[test]
+fn a_spanning_cell_reports_the_first_column_it_covers() {
+    assert_eq!(
+        feature_cell_text(0, 0, 0).as_deref(),
+        Some("Spanning header"),
+        "the header spans columns 0 and 1 and reports 0"
+    );
+    assert_eq!(feature_cell_text(0, 1, 0).as_deref(), Some("Left cell"));
+    assert_eq!(feature_cell_text(0, 1, 1).as_deref(), Some("Right cell"));
+    assert_eq!(
+        feature_cell_text(0, 0, 1),
+        None,
+        "the spanned-over column is not an address of its own"
+    );
+}
+
+/// A vertically merged cell is addressed by the row its merge began on, so both
+/// of its boxes answer to one address.
+///
+/// **Falsified** by addressing a cell by the row it is drawn in rather than by
+/// `origin_row`: rules appear at table 0 row 3 column 0, and a highlight of the
+/// merged cell would light only half of it.
+#[test]
+fn a_vertically_merged_cell_is_addressed_by_the_row_its_merge_began_on() {
+    let items = flat_items(&fixture("flow-features.docx"), "flow-features.docx");
+    assert_eq!(
+        feature_cell_text(0, 2, 0).as_deref(),
+        Some("Merged label"),
+        "the merge starts in row 2"
+    );
+    assert!(
+        !items.iter().any(|item| table_cell(item) == Some((0, 3, 0))),
+        "the continuation row has no cell of its own in column 0"
+    );
+
+    // The merged cell is drawn as two boxes on two rows; both carry row 2.
+    let tops = items
+        .iter()
+        .filter(|item| table_cell(item) == Some((0, 2, 0)))
+        .filter_map(|item| match item {
+            Item::Path(path) => path
+                .path
+                .commands
+                .first()
+                .and_then(|command| match command {
+                    readany_render::PathCommand::Move(point) => Some((point.y * 4.0) as i64),
+                    _ => None,
+                }),
+            _ => None,
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    assert!(
+        tops.len() >= 2,
+        "the merged cell draws a box on each of its two rows, and both carry \
+         row 2: {tops:?}"
+    );
+}
+
+/// A picture inside a cell is addressed by that cell, not by the paragraph that
+/// anchors it.
+///
+/// **Falsified** by giving an image `SourceRef::Text` unconditionally: the
+/// picture in the fourth row reports a paragraph index and the pane beside it
+/// cannot tell which row it belongs to.
+#[test]
+fn a_picture_inside_a_cell_is_addressed_by_that_cell() {
+    let items = flat_items(&fixture("flow-features.docx"), "flow-features.docx");
+    let addresses = items
+        .iter()
+        .filter(|item| matches!(item, Item::Image(_)))
+        .map(table_cell)
+        .collect::<Vec<_>>();
+    assert!(
+        addresses.contains(&Some((0, 4, 0))),
+        "the picture in the table is addressed by its cell: {addresses:?}"
+    );
+    assert!(
+        addresses.contains(&None),
+        "the picture outside the table keeps its paragraph: {addresses:?}"
+    );
+}
+
+/// Tables are numbered across the whole document, so a table in a header cannot
+/// take the body's first index.
+///
+/// **Falsified** by resetting the counter for each part: the header's table
+/// becomes table 0 and shares an address with the body's, so highlighting a
+/// body row would light the header too.
+#[test]
+fn a_table_in_a_header_continues_the_documents_numbering() {
+    assert_eq!(
+        feature_cell_text(1, 0, 0).as_deref(),
+        Some("Header table"),
+        "the header's table is the document's second, not another first"
+    );
+    assert_eq!(
+        feature_cell_text(0, 0, 0).as_deref(),
+        Some("Spanning header"),
+        "and the body's table keeps index zero"
+    );
+}
+
+/// Every `SourceRef` variant appears in the hand-written WASM declarations with
+/// the field names it actually serializes.
+///
+/// The `.d.ts` is copied over wasm-bindgen's generated one by
+/// `scripts/build-wasm.sh` and is what the consuming app compiles against, so a
+/// variant added here and forgotten there is a runtime surprise in a browser
+/// rather than a compile error in this workspace. Nothing else in this
+/// repository compares the two.
+///
+/// **Falsified** by deleting the `TableCell` line from
+/// `crates/readany-render-wasm/readany_render_wasm.d.ts`: this test names the
+/// missing member.
+#[test]
+fn every_source_ref_variant_is_declared_for_the_wasm_boundary() {
+    let declarations = std::fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../readany-render-wasm/readany_render_wasm.d.ts"),
+    )
+    .expect("the checked-in WASM declarations are readable");
+    let collapsed = declarations
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    for source in [
+        readany_render::SourceRef::Cell {
+            sheet: 0,
+            row: 0,
+            column: 0,
+        },
+        readany_render::SourceRef::Text {
+            paragraph: 0,
+            start: 0,
+            end: 0,
+        },
+        readany_render::SourceRef::Shape { slide: 0, shape: 0 },
+        readany_render::SourceRef::TableCell {
+            table: 0,
+            row: 0,
+            column: 0,
+        },
+    ] {
+        let serde_json::Value::Object(fields) =
+            serde_json::to_value(&source).expect("a source reference serializes")
+        else {
+            panic!("a source reference serializes as an object");
+        };
+        let kind = fields
+            .get("kind")
+            .and_then(|value| value.as_str())
+            .expect("the tag is named kind")
+            .to_owned();
+        // Serialization orders the fields alphabetically and the declarations
+        // read in declaration order, so the two are compared as sets.
+        let tag = format!("kind: \"{kind}\"");
+        let member = collapsed
+            .split_once(&tag)
+            .map(|(_, rest)| {
+                rest.split_once('}')
+                    .map(|(member, _)| member)
+                    .unwrap_or(rest)
+            })
+            .unwrap_or_else(|| panic!("readany_render_wasm.d.ts declares no `{tag}` member"));
+        for (name, value) in fields.iter().filter(|(name, _)| name.as_str() != "kind") {
+            let ts = match value {
+                serde_json::Value::Number(_) => "number",
+                serde_json::Value::String(_) => "string",
+                other => panic!("{kind}.{name} serializes as an unhandled {other:?}"),
+            };
+            let field = format!("{name}: {ts}");
+            assert!(
+                member.contains(&field),
+                "the `{kind}` member of readany_render_wasm.d.ts is missing `{field}`"
+            );
+        }
+    }
+}

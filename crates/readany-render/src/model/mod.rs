@@ -191,6 +191,35 @@ pub enum SourceRef {
         slide: u32,
         shape: u32,
     },
+    /// A cell of a table inside a flow document, addressable the way a
+    /// spreadsheet cell is.
+    ///
+    /// **`table` counts tables in document order from zero, per document and
+    /// not per page.** A table that breaks across a page boundary is one table
+    /// with one identity; numbering per page would give its second half a
+    /// different address from its first, and a highlight following a row across
+    /// the break would lose it. Headers, footers and notes continue the same
+    /// sequence rather than restarting, so no two tables in one document share
+    /// an index.
+    ///
+    /// **`row` and `column` are grid positions, not visual ones.** A cell
+    /// spanning three columns through `w:gridSpan` occupies columns 4, 5 and 6
+    /// and reports 4; a `w:vMerge` continuation reports the row its merge
+    /// began on, so every box of a vertically merged cell answers to one
+    /// address. Both are zero-based.
+    ///
+    /// Where tables nest, the innermost cell is the one to report, because an
+    /// outer address would be wrong rather than approximate. **No flow parser
+    /// builds a nested table yet** — a `w:tbl` inside a `w:tc` has its
+    /// paragraphs flowed into the enclosing cell rather than laid out as a
+    /// table of its own — so a nested table's content currently reports the
+    /// cell that encloses it. That is a limitation of table *layout*, not of
+    /// this address; nothing in the corpus exercises it.
+    TableCell {
+        table: usize,
+        row: usize,
+        column: usize,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
