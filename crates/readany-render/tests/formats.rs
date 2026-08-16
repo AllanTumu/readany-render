@@ -1025,6 +1025,57 @@ fn a_page_break_before_the_first_block_does_not_open_a_blank_page() {
     );
 }
 
+/// A tab with nothing after it does not widen the line it ends.
+///
+/// The NIST running header is one paragraph — text, a right tab at the right
+/// margin, the book and year, and then a second `w:tab/` with no run after it.
+/// Counting that trailing tab as width pushed the measured advance to the next
+/// default stop 48 px past the margin, so the header wrapped and `2026` fell to
+/// a second line on all 17 even pages.
+///
+/// **Falsified** by returning `cursor` instead of `painted` from
+/// `advance_rich`: the header occupies two baselines and this fails.
+#[test]
+fn a_trailing_tab_does_not_wrap_the_running_header() {
+    let rendered = render(
+        &real_corpus("nist-hb133-2026-chapter-2.docx"),
+        &Options {
+            filename: Some("nist-hb133-2026-chapter-2.docx"),
+            ..Options::default()
+        },
+    )
+    .expect("the NIST chapter renders");
+    let page = rendered.pages.get(3).expect("an even page");
+    let header = page
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            // The header sits above the 96 px text margin.
+            Item::Glyphs(run) if run.origin.y < 80.0 => Some(run),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert!(!header.is_empty(), "the even page carries a running header");
+    let baselines = header
+        .iter()
+        .map(|run| (run.origin.y * 10.0).round() as i64)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        baselines.len(),
+        1,
+        "the running header is one line, not two: {baselines:?}"
+    );
+    // The right tab is at 9,360 twips, which is 624 px past the 96 px margin.
+    let right = header
+        .iter()
+        .map(|run| run.origin.x + run.glyphs.iter().map(|g| g.x_advance).sum::<f32>())
+        .fold(f32::NEG_INFINITY, f32::max);
+    assert!(
+        (right - 720.0).abs() < 1.0,
+        "and it ends on the right tab stop: {right}"
+    );
+}
+
 /// An omitted OOXML spacing value means zero, not the flow renderer's generic
 /// visual gap.  The NIST contents has 33 compact entries; adding 6.6 px after
 /// every one consumed about 218 px and moved the last four entries to a second

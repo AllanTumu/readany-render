@@ -39,15 +39,17 @@ Measured 16 August 2026, after the flow-table and slide-placement round:
 | `basic.rtf` | 1.000000 | 0.717480 | 0.717480 | 4.30 / 8.07 px |
 | `sheet-a.xlsx` | 1.000000 | 0.978372 | 0.978372 | 0.26 / 0.27 px |
 | `nasa-agency-report-2022.pptx` | 0.947298 | 0.371865 | 0.352267 | 46.17 / 177.55 px |
-| `nist-hb133-2026-chapter-2.docx` | 0.854857 | 0.274914 | 0.235012 | 77.05 / 347.53 px |
+| `nist-hb133-2026-chapter-2.docx` | 0.854857 | 0.275603 | 0.235601 | 76.99 / 347.53 px |
 | `sheet-b.xlsx` | 1.000000 | 0.967207 | 0.967207 | 0.45 / 3.27 px |
 | `uk-ipo-one-way-nda.odt` | 1.000000 | 0.953337 | 0.953337 | 0.58 / 1.73 px |
 
 The page-document text-fidelity mean is **0.652975** and the real-sheet mean is
 **0.972789**. Every synthetic fixture and both workbooks are unchanged to the
-last recorded digit; only the three real flow and slide documents moved. These remain regression evidence, not proof of universal format
-fidelity. CI rejects per-document or corpus regression beyond 0.001, requires
-baseline keys to match the corpus, and enforces both sets of hard floors.
+last recorded digit; only the three real flow and slide documents moved.
+
+These remain regression evidence, not proof of universal format fidelity. CI
+rejects per-document or corpus regression beyond 0.001, requires baseline keys
+to match the corpus, and enforces both sets of hard floors.
 
 ### What the page-aligned figures do and do not say
 
@@ -109,7 +111,7 @@ with LibreOffice to **0.2 px**.
 | --- | ---: | ---: | ---: |
 | `uk-ipo-one-way-nda.odt` | 0.800640 → **0.953337** | 1.000000 | 35.29 → **1.73 px** |
 | `nasa-agency-report-2022.pptx` | 0.252692 → **0.371865** | 0.945187 → **0.947298** | 237.07 → **177.55 px** |
-| `nist-hb133-2026-chapter-2.docx` | 0.253570 → **0.274914** | 0.802986 → **0.854857** | 561.48 → **347.53 px** |
+| `nist-hb133-2026-chapter-2.docx` | 0.253570 → **0.275603** | 0.802986 → **0.854857** | 561.48 → **347.53 px** |
 
 * **ODT moved furthest, and not because of anything ODT-specific.** Tab stops
   had no alignment and were measured from the paragraph indent rather than the
@@ -121,6 +123,13 @@ with LibreOffice to **0.2 px**.
   drawn and multi-level `w:lvlText` labels were substituted at every level. The
   residual is vertical: content accumulates a page-scale offset down the
   document even though pagination stays at 34/34.
+* **A tab with nothing after it was counted as width.** The NIST running header
+  ends with a second `w:tab/` after its last run, which pushed the measured
+  advance to the next default stop 48 px past the right margin and wrapped
+  `2026` onto a second line on all 17 even pages. The header now ends on its
+  right tab stop at 720.0 px against LibreOffice's 720.1. This is the same shape
+  as the `fo:break-before` defect of the previous round: **a rule applied where
+  it has nothing to apply to.**
 * **PPTX group shapes were not read at all.** `p:grpSp` declares both where the
   group sits and the coordinate space its children are written in; the deck's
   second slide holds 44 groups whose children were each placed at their raw

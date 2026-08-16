@@ -41,7 +41,7 @@ fixture and both private workbooks are unchanged to the last recorded digit.
 | --- | ---: | ---: | ---: |
 | `uk-ipo-one-way-nda.odt` | 0.8006 → **0.9533** | 1.0000 → 1.0000 | 35.29 → **1.73 px** |
 | `nasa-agency-report-2022.pptx` | 0.2527 → **0.3719** | 0.9452 → 0.9473 | 237.07 → **177.55 px** |
-| `nist-hb133-2026-chapter-2.docx` | 0.2536 → **0.2749** | 0.8030 → **0.8549** | 561.48 → **347.53 px** |
+| `nist-hb133-2026-chapter-2.docx` | 0.2536 → **0.2756** | 0.8030 → **0.8549** | 561.48 → **347.53 px** |
 
 ## [0.1.1] - 2026-08-13
 

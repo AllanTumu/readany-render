@@ -897,14 +897,24 @@ fn advance_rich(paragraph: &FlowParagraph, range: std::ops::Range<usize>, from: 
     let text = paragraph.text();
     let segments = tab_segments(paragraph, &text, range);
     let mut cursor = from;
+    // **A tab with nothing after it is not a tab.** Where the line ends is
+    // where its last glyph ends; a trailing tab moves the pen and paints
+    // nothing, and counting it as width made the line look wider than it is.
+    // The NIST running header ends with a second `w:tab/` after its final run,
+    // which pushed the measured advance to the next default stop 48 px past the
+    // right margin and wrapped `2026` onto a second line on all 17 even pages.
+    let mut painted = from;
     for (index, segment) in segments.iter().enumerate() {
         if index > 0 {
             let stop = next_tab(cursor, &paragraph.style.tabs, paragraph.style.left);
             cursor = tab_start(cursor, segment, stop);
         }
         cursor += segment.width;
+        if segment.width > 0.0 {
+            painted = cursor;
+        }
     }
-    cursor
+    painted
 }
 
 /// The width a range occupies when the pen starts it at `from`.

@@ -69,7 +69,7 @@ publication readiness.
 | ODS | Implemented; not real-corpus proven | Generated ODS fixtures and golden/raster tests only |
 | CSV | Implemented; parser-tested only | Generated quoted-field/newline fixtures only |
 | TSV | Implemented; parser-tested only | Generated delimiter fixtures only |
-| DOCX | Reading and table structure good, vertical flow poor | Real NIST chapter: 34 pages against 34, exact text 0.8549, and table columns that agree with LibreOffice to 0.2 px — but geometry 0.2749 and p95 348 px, because content still drifts vertically down the page. |
+| DOCX | Reading and table structure good, vertical flow poor | Real NIST chapter: 34 pages against 34, exact text 0.8549, and table columns that agree with LibreOffice to 0.2 px — but geometry 0.2756 and p95 348 px, because content still drifts vertically down the page. |
 | ODT | Proven on current corpus | Real UK IPO agreement: **1.0000 exact text**, geometry 0.9533, p95 1.73 px, and pagination matching LibreOffice. |
 | RTF | Implemented; synthetic evidence only | `basic.rtf`: 100% exact text, 8.07 px p95; no real RTF corpus document |
 | PPTX | Text near-complete, placement improving | Real NASA deck: correct slide count and exact text 0.9473, geometry 0.3719 and p95 178 px on a 720 px slide. Shape *position* is right where the deck says it plainly; the residue is in grouped and tabular frames. |
