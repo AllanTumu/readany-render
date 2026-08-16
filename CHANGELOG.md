@@ -5,6 +5,36 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-08-16
+
+### Fixed
+
+- **Word tables lay out as columns.** They previously rendered as flowing text
+  with no cell borders and no column positions, which was worse than the
+  markdown fallback a consumer would otherwise use. Table columns now agree
+  with LibreOffice to 0.2 px on the real corpus chapter.
+- Tabs are placed where the document puts them, and a tab with nothing after it
+  no longer widens the line it ends.
+- PPTX shapes are placed through their groups, and rotated shapes are rotated.
+  A slide run with no size takes the one its paragraph declares.
+
+### Measured
+
+Against LibreOffice, on the real corpus:
+
+| document | exact text | geometry | p95 |
+| --- | ---: | ---: | ---: |
+| `uk-ipo-one-way-nda.odt` | 1.0000 | 0.9533 | 1.73 px |
+| `nasa-agency-report-2022.pptx` | 0.9473 | 0.3719 | 177.55 px |
+| `nist-hb133-2026-chapter-2.docx` | 0.8549 | 0.2756 | 347.53 px |
+
+Spreadsheets are unchanged at 1.0000 exact, p95 0.27 px and 3.27 px.
+
+**ODT is the second proven format.** DOCX now reads and tabulates correctly and
+still drifts vertically down the page; PPTX places plainly-stated shapes and
+still misplaces grouped and tabular frames. Neither is finished, and the status
+table in `README.md` says so per format.
+
 ### Fixed
 
 - **Word tables are laid out as columns.** A table row was flattened into one

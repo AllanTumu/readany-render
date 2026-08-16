@@ -570,7 +570,7 @@ dependencies = [
 
 [[package]]
 name = "readany-render"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64",
  "encoding_rs",
@@ -592,7 +592,7 @@ dependencies = [
 
 [[package]]
 name = "readany-render-cli"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "readany-render",
  "serde_json",
@@ -600,7 +600,7 @@ dependencies = [
 
 [[package]]
 name = "readany-render-harness"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "image",
  "quick-xml",
@@ -611,7 +611,7 @@ dependencies = [
 
 [[package]]
 name = "readany-render-wasm"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "js-sys",
  "readany-render",
