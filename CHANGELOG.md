@@ -5,6 +5,37 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- `SourceRef::TableCell { table, row, column }`, so a cell of a table in a flow
+  document is addressable the way a spreadsheet cell is. Every glyph, rule,
+  shading fill and picture inside a Word table cell carries it; text outside a
+  table still reports `Text`. Table indices run in document order across the
+  whole document — body, then notes, then headers and footers — so a table split
+  across a page boundary keeps one identity and a header's table cannot take the
+  body's first index. Rows and columns are grid positions: a `w:gridSpan` cell
+  reports the first column it covers and a `w:vMerge` continuation the row its
+  merge began on.
+
+  On `nist-hb133-2026-chapter-2.docx`, 515 items now carry an address against
+  zero before. This is an additive variant: `Cell`, `Text` and `Shape` mean
+  exactly what they meant, and `readany_render_wasm.d.ts` carries the new
+  member.
+
+  **ODT is not included.** The OpenDocument parser does not build tables at all
+  — a `table:table`'s cells flow as ordinary stacked paragraphs — so there is no
+  ODT table layout to label. Nested tables are in the same position: a `w:tbl`
+  inside a `w:tc` has its paragraphs flowed into the enclosing cell, so its
+  content reports that enclosing cell.
+
+### Fixed
+
+- An image anchored to a paragraph that holds nothing else is placed against
+  that paragraph instead of falling back to the top of page one. Layout records
+  where each paragraph came to rest rather than being asked afterwards to find a
+  glyph carrying its source — a paragraph holding only a drawing has no glyph to
+  find. Both images in the NIST chapter were affected.
+
 ## [0.1.2] - 2026-08-16
 
 ### Fixed
