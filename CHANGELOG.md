@@ -5,6 +5,29 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-08-16
+
+### Added
+
+- `SourceRef::TableCell { table, row, column }`, so a cell in a Word or
+  OpenDocument table can be addressed the way a spreadsheet cell already could.
+  Such a cell previously reported `SourceRef::Text` — a paragraph index and
+  character offsets — which named no table, row or column, so a consumer
+  showing a document beside its extracted rows could highlight a sheet row and
+  not a table row.
+
+  The geometry was already correct: 0.1.2 laid Word tables out as columns that
+  agree with LibreOffice to 0.2 px. This names the boxes that were already
+  being drawn.
+
+  **Additive.** `SourceRef` is `#[non_exhaustive]`, so a downstream match
+  already carries a wildcard arm and keeps compiling. `Cell`, `Text` and
+  `Shape` are unchanged, and text outside a table still reports `Text`.
+
+  The TypeScript declaration in `crates/readany-render-wasm/readany_render_wasm.d.ts`
+  carries the variant too, since it crosses the WASM boundary where a mismatch
+  is a runtime error rather than a compile error.
+
 ### Added
 
 - `SourceRef::TableCell { table, row, column }`, so a cell of a table in a flow
