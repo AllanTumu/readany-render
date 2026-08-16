@@ -1,6 +1,6 @@
 use crate::RenderError;
 use crate::container::xml;
-use crate::flow::{Alignment, ParagraphStyle, default_text_style};
+use crate::flow::{Alignment, ParagraphStyle, TabAlignment, TabStop, default_text_style};
 use crate::model::Colour;
 use crate::text::TextStyle;
 use quick_xml::events::{BytesStart, Event};
@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct RunPatch {
+    hidden: Option<bool>,
     family: Option<String>,
     size_px: Option<f32>,
     colour: Option<Colour>,
@@ -16,6 +17,13 @@ pub(crate) struct RunPatch {
 }
 
 impl RunPatch {
+    /// `w:vanish` is hidden text: Word neither shows nor prints it. The NIST
+    /// chapter carries hidden numbered paragraphs beside its real headings, and
+    /// rendering them put a second, wrong chapter number on the page.
+    pub(crate) fn hidden(&self) -> bool {
+        self.hidden.unwrap_or(false)
+    }
+
     pub(crate) fn apply_to(&self, style: &mut TextStyle) {
         if let Some(family) = &self.family {
             style.family.clone_from(family);
@@ -38,6 +46,7 @@ impl RunPatch {
         if patch.family.is_some() {
             self.family.clone_from(&patch.family);
         }
+        self.hidden = patch.hidden.or(self.hidden);
         self.size_px = patch.size_px.or(self.size_px);
         self.colour = patch.colour.or(self.colour);
         self.bold = patch.bold.or(self.bold);
@@ -59,7 +68,7 @@ pub(crate) struct ParagraphPatch {
     keep_lines: Option<bool>,
     widow_control: Option<bool>,
     page_break_before: Option<bool>,
-    tabs: Option<Vec<f32>>,
+    tabs: Option<Vec<TabStop>>,
 }
 
 impl ParagraphPatch {
@@ -286,6 +295,7 @@ pub(crate) fn apply_run_property(start: &BytesStart<'_>, patch: &mut RunPatch) {
                 .map(|half_points| half_points / 2.0 * 96.0 / 72.0);
         }
         b"color" => patch.colour = attr(start, b"val").and_then(|value| colour(&value)),
+        b"vanish" | b"specVanish" => patch.hidden = Some(toggle(start)),
         b"b" | b"bCs" => patch.bold = Some(toggle(start)),
         b"i" | b"iCs" => patch.italic = Some(toggle(start)),
         _ => {}
@@ -342,12 +352,29 @@ pub(crate) fn apply_paragraph_property(start: &BytesStart<'_>, patch: &mut Parag
         b"keepLines" => patch.keep_lines = Some(toggle(start)),
         b"widowControl" => patch.widow_control = Some(toggle(start)),
         b"pageBreakBefore" => patch.page_break_before = Some(toggle(start)),
-        b"tab" if attr(start, b"val").as_deref() != Some("clear") => {
+        b"tab" => {
+            // `clear` removes an inherited stop and `bar` is a vertical rule
+            // rather than a stop, so neither may become a place text jumps to.
+            let alignment = match attr(start, b"val").as_deref() {
+                Some("clear") | Some("bar") => return,
+                Some("center") => TabAlignment::Centre,
+                Some("right") | Some("end") => TabAlignment::Right,
+                Some("decimal") => TabAlignment::Decimal,
+                Some("left") | Some("start") | Some("num") | Some(_) | None => TabAlignment::Left,
+            };
             if let Some(position) = attr(start, b"pos")
                 .and_then(|value| value.parse::<f32>().ok())
                 .map(twip)
             {
-                patch.tabs.get_or_insert_with(Vec::new).push(position);
+                let tabs = patch.tabs.get_or_insert_with(Vec::new);
+                tabs.push(TabStop {
+                    position,
+                    alignment,
+                });
+                // Word writes stops in order, but a paragraph that clears an
+                // inherited stop and adds a nearer one does not; resolution
+                // walks the list forwards and must see them sorted.
+                tabs.sort_by(|left, right| left.position.total_cmp(&right.position));
             }
         }
         _ => {}

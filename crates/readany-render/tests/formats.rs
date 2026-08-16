@@ -476,15 +476,104 @@ fn docx_style_lists_tables_images_and_repeating_parts_share_one_display_list() {
     assert!(rendered.pages.iter().flat_map(|page| &page.items).any(|item| {
         matches!(item, Item::Image(image) if matches!(image.source, Some(readany_render::SourceRef::Text { .. })))
     }));
+    let rules = rendered
+        .pages
+        .iter()
+        .flat_map(|page| &page.items)
+        .filter_map(|item| match item {
+            Item::Path(path) => Some(path),
+            _ => None,
+        })
+        .count();
     assert!(
-        rendered
-            .pages
-            .iter()
-            .flat_map(|page| &page.items)
-            .filter(|item| matches!(item, Item::Path(_)))
-            .count()
-            >= 2,
-        "both table cells have explicit inspectable borders"
+        rules >= 8,
+        "the declared w:tblBorders draw a rule on every edge of every cell, \
+         and this table has three cells; got {rules}"
+    );
+
+    // The grid is 2160 + 2880 twips inside a 1440 twip margin: column one runs
+    // 96 to 240 px and column two 240 to 432 px, each inset by the declared
+    // 108 twip cell padding.
+    let left = glyphs
+        .iter()
+        .find(|run| run.text == "Left cell")
+        .expect("the first column's text");
+    assert!(
+        (left.origin.x - 103.2).abs() < 0.5,
+        "the first column starts at its own grid position, not the text margin: {}",
+        left.origin.x
+    );
+    let right = glyphs
+        .iter()
+        .find(|run| run.text == "Right cell")
+        .expect("the second column's text");
+    let right_edge = right.origin.x + right.glyphs.iter().map(|g| g.x_advance).sum::<f32>();
+    assert!(
+        (right_edge - 424.8).abs() < 0.5,
+        "a right-aligned cell ends at its own column's right edge, which a \
+         tab-separated row cannot express: {right_edge}"
+    );
+    assert!(
+        right.origin.x > left.origin.x + 130.0,
+        "the columns are laid out side by side rather than run together"
+    );
+}
+
+/// A `w:gridSpan` cell covers the columns it claims, so its rules stand at the
+/// table's outer edges rather than at the first column's.
+///
+/// **Falsified** by ignoring `w:gridSpan` when resolving a cell's right-hand
+/// grid column: the spanning header's right-hand rule moves from 432 px to
+/// 240 px and the assertion below fails.
+#[test]
+fn a_spanning_header_cell_is_as_wide_as_the_columns_it_covers() {
+    let rendered = render(
+        &fixture("flow-features.docx"),
+        &Options {
+            filename: Some("flow-features.docx"),
+            ..Options::default()
+        },
+    )
+    .expect("the generated flow feature document is valid");
+    let header = rendered
+        .pages
+        .iter()
+        .flat_map(|page| &page.items)
+        .filter_map(|item| match item {
+            Item::Glyphs(run) if run.text == "Spanning header" => Some(run),
+            _ => None,
+        })
+        .next()
+        .expect("the spanning header's text");
+    let vertical_rules = rendered
+        .pages
+        .iter()
+        .flat_map(|page| &page.items)
+        .filter_map(|item| match item {
+            Item::Path(path) => path.path.commands.first().and_then(|command| {
+                match (command, path.path.commands.get(1)) {
+                    (
+                        readany_render::PathCommand::Move(from),
+                        Some(readany_render::PathCommand::Line(to)),
+                    ) if (from.x - to.x).abs() < 0.01
+                        && (from.y - to.y).abs() > 0.01
+                        && from.y < header.origin.y =>
+                    {
+                        Some(from.x)
+                    }
+                    _ => None,
+                }
+            }),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        vertical_rules.iter().any(|x| (*x - 432.0).abs() < 0.5),
+        "the spanning cell's right-hand rule stands at the table's right edge: {vertical_rules:?}"
+    );
+    assert!(
+        !vertical_rules.iter().any(|x| (*x - 240.0).abs() < 0.5),
+        "no rule divides the spanned columns inside the merged header: {vertical_rules:?}"
     );
 }
 

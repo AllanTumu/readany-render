@@ -2,8 +2,11 @@ use crate::container::{resolve_relationship, xml, zip::Archive};
 use crate::flow::styles::{
     ParagraphPatch, RunPatch, StyleSheet, apply_paragraph_property, apply_run_property,
 };
-use crate::flow::{FlowParagraph, FlowRun, layout_flow};
-use crate::model::{ImageData, ImageItem, Item, Rect, Size, SourceRef, Unrendered};
+use crate::flow::{
+    Border, BorderEdges, FlowBlock, FlowCell, FlowParagraph, FlowRow, FlowRun, FlowTable,
+    VerticalAlignment, VerticalMerge, layout_blocks,
+};
+use crate::model::{Colour, ImageData, ImageItem, Item, Rect, Size, SourceRef, Unrendered};
 use crate::{Format, Options, RenderError};
 use quick_xml::events::{BytesStart, Event};
 use std::collections::{BTreeMap, BTreeSet};
@@ -25,18 +28,17 @@ pub(crate) fn render(bytes: &[u8], options: &Options<'_>) -> Result<crate::Rende
         if let Some(notes) = archive.get(notes_name) {
             xml::validate(notes, &options.limits)?;
             let notes = parse_part(notes, &styles, &numbering)?;
-            parsed.paragraphs.extend(notes.paragraphs);
+            parsed.blocks.extend(notes.blocks);
         }
     }
 
-    let mut rendered = layout_flow(
-        &parsed.paragraphs,
+    let mut rendered = layout_blocks(
+        &parsed.blocks,
         Format::Docx,
         options,
         parsed.size,
         parsed.margins,
     )?;
-    paint_tables(&parsed.tables, parsed.margins, &mut rendered);
     paint_repeating_parts(
         &RepeatingPartContext {
             archive: &archive,
@@ -48,6 +50,8 @@ pub(crate) fn render(bytes: &[u8], options: &Options<'_>) -> Result<crate::Rende
         },
         &mut rendered,
         parsed.margins,
+        parsed.header_offset,
+        parsed.footer_offset,
     )?;
     paint_images(
         &archive,
@@ -86,37 +90,43 @@ fn paint_repeating_parts(
     context: &RepeatingPartContext<'_, '_>,
     rendered: &mut crate::Rendered,
     margins: Margins,
+    header_offset: f32,
+    footer_offset: f32,
 ) -> Result<(), RenderError> {
     let parts = parse_repeating_parts(context.document, context.relationships)?;
     let names = parts.targets().map(str::to_owned).collect::<BTreeSet<_>>();
     let mut laid_out = BTreeMap::<String, Vec<Item>>::new();
+    let Some(page_size) = rendered.pages.first().map(|page| page.size) else {
+        return Ok(());
+    };
     for name in names {
         let Some(bytes) = context.archive.get(&name) else {
             continue;
         };
         let parsed = parse_part(bytes, context.styles, context.numbering)?;
         let header = name.starts_with("word/header");
-        let vertical = if header { 24.0 } else { 48.0 };
+        // A header starts `w:header` px below the top edge and may run down to
+        // the text margin; a footer starts `w:footer` px above the bottom edge.
         let part_margins = if header {
             (
                 margins.0,
-                vertical,
+                header_offset,
                 margins.2,
-                rendered.pages[0].size.height - 80.0,
+                (page_size.height - margins.1).max(0.0),
             )
         } else {
             (
                 margins.0,
-                rendered.pages[0].size.height - 64.0,
+                (page_size.height - footer_offset).max(0.0),
                 margins.2,
-                16.0,
+                0.0,
             )
         };
-        let part = layout_flow(
-            &parsed.paragraphs,
+        let part = layout_blocks(
+            &parsed.blocks,
             Format::Docx,
             context.options,
-            rendered.pages[0].size,
+            page_size,
             part_margins,
         )?;
         if let Some(part_page) = part.pages.first() {
@@ -334,22 +344,14 @@ struct PendingImage {
 type Margins = (f32, f32, f32, f32);
 
 struct ParsedDocument {
-    paragraphs: Vec<FlowParagraph>,
+    blocks: Vec<FlowBlock>,
     size: Size,
     margins: Margins,
+    /// Distance from the page edge to the running header's text, and to the
+    /// footer's, from `w:pgMar`.
+    header_offset: f32,
+    footer_offset: f32,
     images: Vec<PendingImage>,
-    tables: Vec<TableRow>,
-}
-
-struct TableRow {
-    paragraph: u32,
-    widths: Vec<f32>,
-}
-
-struct TableCell {
-    paragraphs: Vec<FlowParagraph>,
-    width: Option<f32>,
-    span: u32,
 }
 
 #[derive(Default)]
@@ -359,13 +361,231 @@ struct PendingRun {
     style_id: Option<String>,
 }
 
+/// The six rules a `w:tblBorders` declares. The four outer ones apply to the
+/// table's edges and the two inside ones to every seam between cells, which is
+/// why a cell cannot resolve its own borders without the table's.
+#[derive(Clone, Copy, Debug, Default)]
+struct TableBorders {
+    top: Option<Border>,
+    left: Option<Border>,
+    bottom: Option<Border>,
+    right: Option<Border>,
+    inside_horizontal: Option<Border>,
+    inside_vertical: Option<Border>,
+}
+
+/// A `w:tcBorders` edge, where "absent" and "explicitly none" differ: the first
+/// falls back to the table's rule and the second suppresses it.
+#[derive(Clone, Copy, Debug, Default)]
+struct BorderOverrides {
+    top: Option<Option<Border>>,
+    left: Option<Option<Border>>,
+    bottom: Option<Option<Border>>,
+    right: Option<Option<Border>>,
+}
+
+#[derive(Default)]
+struct PendingCell {
+    paragraphs: Vec<FlowParagraph>,
+    column: usize,
+    span: usize,
+    merge: VerticalMerge,
+    vertical_alignment: VerticalAlignment,
+    overrides: BorderOverrides,
+    shading: Option<Colour>,
+    /// `w:tcW` in pixels, used only where `w:tblGrid` is absent.
+    width: Option<f32>,
+}
+
+#[derive(Default)]
+struct PendingRow {
+    cells: Vec<PendingCell>,
+    minimum_height: f32,
+    /// Where the next cell starts in the grid, advanced by each `w:gridSpan`.
+    next_column: usize,
+}
+
+struct TableBuilder {
+    grid: Vec<f32>,
+    borders: TableBorders,
+    indent: f32,
+    /// Left, top, right, bottom padding inside every cell.
+    cell_margins: (f32, f32, f32, f32),
+    rows: Vec<PendingRow>,
+}
+
+impl Default for TableBuilder {
+    fn default() -> Self {
+        Self {
+            grid: Vec::new(),
+            borders: TableBorders::default(),
+            indent: 0.0,
+            // ECMA-376's default cell padding is 108 twips left and right and
+            // nothing above or below.
+            cell_margins: (7.2, 0.0, 7.2, 0.0),
+            rows: Vec::new(),
+        }
+    }
+}
+
+impl TableBuilder {
+    /// Resolves the pending rows into a laid-out-ready table.
+    ///
+    /// Column widths come from `w:tblGrid`; a table that omits it — legal, and
+    /// what an auto-width table written by a converter looks like — falls back
+    /// to the widest `w:tcW` seen in each column so the columns still line up
+    /// with each other.
+    fn finish(self) -> FlowTable {
+        let mut columns = self.grid;
+        for row in &self.rows {
+            for cell in &row.cells {
+                let span = cell.span.max(1);
+                let end = cell.column.saturating_add(span);
+                if columns.len() < end {
+                    columns.resize(end, 0.0);
+                }
+                let Some(width) = cell.width else { continue };
+                let declared = columns
+                    .get(cell.column..end)
+                    .map(|slice| slice.iter().sum::<f32>())
+                    .unwrap_or(0.0);
+                if declared > 0.0 {
+                    continue;
+                }
+                if let Some(column) = columns.get_mut(cell.column) {
+                    *column = column.max(width / span as f32);
+                }
+                for offset in 1..span {
+                    if let Some(column) = columns.get_mut(cell.column + offset) {
+                        *column = column.max(width / span as f32);
+                    }
+                }
+            }
+        }
+        let last_column = columns.len();
+        let rows = self
+            .rows
+            .into_iter()
+            .enumerate()
+            .map(|(row_index, row)| {
+                let first_row = row_index == 0;
+                let cells = row
+                    .cells
+                    .into_iter()
+                    .map(|cell| {
+                        let span = cell.span.max(1);
+                        let first_column = cell.column == 0;
+                        let last = cell.column.saturating_add(span) >= last_column;
+                        FlowCell {
+                            borders: BorderEdges {
+                                top: cell.overrides.top.unwrap_or(if first_row {
+                                    self.borders.top
+                                } else {
+                                    self.borders.inside_horizontal
+                                }),
+                                left: cell.overrides.left.unwrap_or(if first_column {
+                                    self.borders.left
+                                } else {
+                                    self.borders.inside_vertical
+                                }),
+                                bottom: cell.overrides.bottom.unwrap_or(self.borders.bottom),
+                                right: cell.overrides.right.unwrap_or(if last {
+                                    self.borders.right
+                                } else {
+                                    self.borders.inside_vertical
+                                }),
+                            },
+                            paragraphs: cell.paragraphs,
+                            column: cell.column,
+                            span,
+                            merge: cell.merge,
+                            vertical_alignment: cell.vertical_alignment,
+                            shading: cell.shading,
+                        }
+                    })
+                    .collect();
+                FlowRow {
+                    cells,
+                    minimum_height: row.minimum_height,
+                }
+            })
+            .collect::<Vec<FlowRow>>();
+        // The bottom rule of every row but the last is the inside horizontal
+        // one, and the row below draws it too; letting both draw it keeps a
+        // single-row table's bottom edge without special-casing the seam.
+        let mut rows = rows;
+        let row_count = rows.len();
+        for (row_index, row) in rows.iter_mut().enumerate() {
+            if row_index + 1 == row_count {
+                continue;
+            }
+            for cell in &mut row.cells {
+                cell.borders.bottom = None;
+            }
+        }
+        FlowTable {
+            rows,
+            columns,
+            indent: self.indent,
+            cell_margin_left: self.cell_margins.0,
+            cell_margin_top: self.cell_margins.1,
+            cell_margin_right: self.cell_margins.2,
+            cell_margin_bottom: self.cell_margins.3,
+        }
+    }
+}
+
+/// A `w:sz` is in eighths of a point; at 96 dpi that is `sz / 6` pixels.
+/// `w:val="nil"` and `"none"` are the absence of a rule, not a thin one.
+fn parse_border(start: &BytesStart<'_>) -> Option<Border> {
+    match attr(start, b"val").as_deref() {
+        Some("nil") | Some("none") | None => None,
+        Some(_) => Some(Border {
+            width: attr(start, b"sz")
+                .and_then(|value| value.parse::<f32>().ok())
+                .map(|eighths| eighths / 6.0)
+                .unwrap_or(1.0)
+                .max(0.5),
+            colour: attr(start, b"color")
+                .and_then(|value| border_colour(&value))
+                .unwrap_or(Colour::BLACK),
+        }),
+    }
+}
+
+fn border_colour(value: &str) -> Option<Colour> {
+    if value.eq_ignore_ascii_case("auto") || value.len() != 6 {
+        return None;
+    }
+    Some(Colour {
+        r: u8::from_str_radix(&value[0..2], 16).ok()?,
+        g: u8::from_str_radix(&value[2..4], 16).ok()?,
+        b: u8::from_str_radix(&value[4..6], 16).ok()?,
+        a: 255,
+    })
+}
+
+/// Which part of a table the parser is inside. Cell padding and border rules
+/// share element names — `w:top` means both — so the scope has to be tracked
+/// rather than inferred from the name.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TableScope {
+    None,
+    TableBorders,
+    CellMargins,
+    CellBorders,
+    /// `w:tcMar` and `w:tblPrEx`, which use the same element names and which
+    /// this renderer does not apply.
+    Ignored,
+}
+
 fn parse_part(
     bytes: &[u8],
     styles: &StyleSheet,
     numbering: &Numbering,
 ) -> Result<ParsedDocument, RenderError> {
     let mut reader = quick_xml::Reader::from_reader(bytes);
-    let mut paragraphs = Vec::new();
+    let mut blocks = Vec::<FlowBlock>::new();
     let mut pending_runs = Vec::<PendingRun>::new();
     let mut current_run = None::<PendingRun>;
     let mut paragraph_patch = ParagraphPatch::default();
@@ -374,6 +594,10 @@ fn parse_part(
     let mut list_level = 0_u32;
     let mut in_paragraph = false;
     let mut in_paragraph_properties = false;
+    // `w:pPr/w:rPr` is the paragraph *mark's* formatting, and `w:vanish` there
+    // hides the whole paragraph rather than one run.
+    let mut in_paragraph_mark_properties = false;
+    let mut paragraph_hidden = false;
     let mut in_run_properties = false;
     let mut in_text = false;
     let mut in_instruction = false;
@@ -387,49 +611,46 @@ fn parse_part(
     let mut position_text = String::new();
     let mut counters = BTreeMap::<(u32, u32), u32>::new();
     let mut table_depth = 0_u32;
-    let mut table_grid = Vec::<f32>::new();
-    let mut table_rows = Vec::<TableRow>::new();
-    let mut row_cells = Vec::<TableCell>::new();
-    let mut cell_start = None::<usize>;
-    let mut cell_width = None::<f32>;
-    let mut cell_span = 1_u32;
+    let mut table = TableBuilder::default();
+    let mut row = PendingRow::default();
+    let mut cell = None::<PendingCell>;
+    let mut table_scope = TableScope::None;
+    // The index every paragraph is known by, counted in document order across
+    // cells as well as the body, so an image anchored to a paragraph inside a
+    // table still finds it after layout.
+    let mut paragraph_index = 0_u32;
     loop {
         match reader.read_event() {
             Ok(Event::Start(start)) => match xml::local_name(start.name().as_ref()) {
                 b"tbl" => {
                     table_depth = table_depth.saturating_add(1);
                     if table_depth == 1 {
-                        table_grid.clear();
+                        table = TableBuilder::default();
                     }
                 }
-                b"tr" if table_depth == 1 => row_cells.clear(),
+                b"tr" if table_depth == 1 => row = PendingRow::default(),
                 b"tc" if table_depth == 1 => {
-                    cell_start = Some(paragraphs.len());
-                    cell_width = None;
-                    cell_span = 1;
+                    cell = Some(PendingCell {
+                        column: row.next_column,
+                        span: 1,
+                        ..PendingCell::default()
+                    });
                 }
-                b"gridCol" if table_depth == 1 => {
-                    table_grid.push(twip_num(&start, b"w", 1_440));
-                }
-                b"gridSpan" if table_depth == 1 => {
-                    cell_span = attr(&start, b"val")
-                        .and_then(|value| value.parse().ok())
-                        .unwrap_or(1);
-                }
-                b"tcW" if table_depth == 1 => {
-                    cell_width = attr(&start, b"w")
-                        .and_then(|value| value.parse::<u32>().ok())
-                        .map(twip);
-                }
+                b"tblBorders" if table_depth == 1 => table_scope = TableScope::TableBorders,
+                b"tblCellMar" if table_depth == 1 => table_scope = TableScope::CellMargins,
+                b"tcBorders" if table_depth == 1 => table_scope = TableScope::CellBorders,
+                b"tcMar" | b"tblPrEx" | b"pBdr" => table_scope = TableScope::Ignored,
                 b"p" => {
                     in_paragraph = true;
                     pending_runs.clear();
                     paragraph_patch = ParagraphPatch::default();
                     paragraph_style_id = None;
+                    paragraph_hidden = false;
                     list_id = None;
                     list_level = 0;
                 }
                 b"pPr" if in_paragraph => in_paragraph_properties = true,
+                b"rPr" if in_paragraph_properties => in_paragraph_mark_properties = true,
                 b"r" if in_paragraph => current_run = Some(PendingRun::default()),
                 b"rPr" if current_run.is_some() => in_run_properties = true,
                 b"t" if current_run.is_some() => in_text = true,
@@ -437,7 +658,7 @@ fn parse_part(
                 b"drawing" | b"pict" if in_paragraph => {
                     image = Some(PendingImage {
                         relationship: String::new(),
-                        paragraph: paragraphs.len() as u32,
+                        paragraph: paragraph_index,
                         width: 96.0,
                         height: 96.0,
                         x: None,
@@ -467,16 +688,21 @@ fn parse_part(
             Ok(Event::Empty(start)) => {
                 let qualified_name = start.name();
                 let name = xml::local_name(qualified_name.as_ref());
-                if name == b"gridCol" && table_depth == 1 {
-                    table_grid.push(twip_num(&start, b"w", 1_440));
-                } else if name == b"gridSpan" && table_depth == 1 {
-                    cell_span = attr(&start, b"val")
-                        .and_then(|value| value.parse().ok())
-                        .unwrap_or(1);
-                } else if name == b"tcW" && table_depth == 1 {
-                    cell_width = attr(&start, b"w")
-                        .and_then(|value| value.parse::<u32>().ok())
-                        .map(twip);
+                if table_depth == 1
+                    && apply_table_property(
+                        &start,
+                        name,
+                        table_scope,
+                        &mut table,
+                        &mut row,
+                        cell.as_mut(),
+                    )
+                {
+                    // Consumed as table geometry.
+                } else if in_paragraph_mark_properties && matches!(name, b"vanish" | b"specVanish")
+                {
+                    paragraph_hidden = attr(&start, b"val").as_deref() != Some("0")
+                        && attr(&start, b"val").as_deref() != Some("false");
                 } else if name == b"tab" && current_run.is_some() && !in_run_properties {
                     if let Some(run) = &mut current_run {
                         run.text.push('\t');
@@ -533,6 +759,7 @@ fn parse_part(
                     paragraph_patch.apply_to(&mut paragraph_style);
                     let mut runs = pending_runs
                         .drain(..)
+                        .filter(|pending| !pending.patch.hidden())
                         .map(|pending| {
                             let mut style = resolved.text.clone();
                             if let Some(style_id) = pending.style_id.as_deref() {
@@ -545,16 +772,16 @@ fn parse_part(
                             }
                         })
                         .collect::<Vec<_>>();
-                    if let Some(num_id) = list_id {
-                        if let Some(label) = numbering.label(num_id, list_level, &mut counters) {
-                            runs.insert(
-                                0,
-                                FlowRun {
-                                    text: format!("{label}\t"),
-                                    style: resolved.text.clone(),
-                                },
-                            );
-                        }
+                    if let Some((label, suffix)) = list_id
+                        .and_then(|num_id| numbering.label(num_id, list_level, &mut counters))
+                    {
+                        runs.insert(
+                            0,
+                            FlowRun {
+                                text: format!("{label}{suffix}"),
+                                style: resolved.text.clone(),
+                            },
+                        );
                     }
                     if runs.is_empty() {
                         runs.push(FlowRun {
@@ -562,14 +789,27 @@ fn parse_part(
                             style: resolved.text.clone(),
                         });
                     }
-                    paragraphs.push(FlowParagraph {
+                    let paragraph = FlowParagraph {
                         runs,
                         style: paragraph_style,
-                    });
+                    };
+                    if paragraph_hidden {
+                        paragraph_index = paragraph_index.saturating_add(1);
+                        in_paragraph = false;
+                        continue;
+                    }
+                    match cell.as_mut() {
+                        Some(cell) => cell.paragraphs.push(paragraph),
+                        None => blocks.push(FlowBlock::Paragraph(paragraph)),
+                    }
+                    paragraph_index = paragraph_index.saturating_add(1);
                     in_paragraph = false;
                 }
                 b"pPr" => in_paragraph_properties = false,
-                b"rPr" => in_run_properties = false,
+                b"rPr" => {
+                    in_paragraph_mark_properties = false;
+                    in_run_properties = false;
+                }
                 b"r" => {
                     if let Some(run) = current_run.take() {
                         if !run.text.is_empty() {
@@ -599,78 +839,26 @@ fn parse_part(
                     }
                     in_position_offset = false;
                 }
-                b"tc" if table_depth == 1 => {
-                    let start = cell_start
-                        .take()
-                        .unwrap_or(paragraphs.len())
-                        .min(paragraphs.len());
-                    row_cells.push(TableCell {
-                        paragraphs: paragraphs.drain(start..).collect(),
-                        width: cell_width,
-                        span: cell_span,
-                    });
+                b"tblBorders" | b"tblCellMar" | b"tcBorders" | b"tcMar" | b"tblPrEx" | b"pBdr" => {
+                    table_scope = TableScope::None;
                 }
-                b"tr" if table_depth == 1 => {
-                    if !row_cells.is_empty() {
-                        let mut runs = Vec::<FlowRun>::new();
-                        let mut paragraph_style = row_cells
-                            .iter()
-                            .flat_map(|cell| cell.paragraphs.first())
-                            .next()
-                            .map(|paragraph| paragraph.style.clone())
-                            .unwrap_or_default();
-                        let mut widths = Vec::new();
-                        let mut grid_cursor = 0_usize;
-                        for (cell_index, cell) in row_cells.drain(..).enumerate() {
-                            if cell_index > 0 {
-                                runs.push(FlowRun {
-                                    text: "\t".into(),
-                                    style: runs
-                                        .last()
-                                        .map(|run| run.style.clone())
-                                        .unwrap_or_else(crate::flow::default_text_style),
-                                });
-                            }
-                            for (paragraph_index, paragraph) in
-                                cell.paragraphs.into_iter().enumerate()
-                            {
-                                if paragraph_index > 0 {
-                                    runs.push(FlowRun {
-                                        text: "\n".into(),
-                                        style: paragraph
-                                            .runs
-                                            .first()
-                                            .map(|run| run.style.clone())
-                                            .unwrap_or_else(crate::flow::default_text_style),
-                                    });
-                                }
-                                runs.extend(paragraph.runs);
-                            }
-                            let span = cell.span.max(1) as usize;
-                            let grid_width =
-                                table_grid.iter().skip(grid_cursor).take(span).sum::<f32>();
-                            widths.push(cell.width.unwrap_or_else(|| grid_width.max(96.0)));
-                            grid_cursor = grid_cursor.saturating_add(span);
-                        }
-                        let mut cumulative = 0.0;
-                        paragraph_style.tabs = widths
-                            .iter()
-                            .take(widths.len().saturating_sub(1))
-                            .map(|width| {
-                                cumulative += *width;
-                                cumulative
-                            })
-                            .collect();
-                        paragraph_style.after = 0.0;
-                        let paragraph = paragraphs.len() as u32;
-                        paragraphs.push(FlowParagraph {
-                            runs,
-                            style: paragraph_style,
-                        });
-                        table_rows.push(TableRow { paragraph, widths });
+                b"tc" if table_depth == 1 => {
+                    if let Some(cell) = cell.take() {
+                        row.next_column = cell.column.saturating_add(cell.span.max(1));
+                        row.cells.push(cell);
                     }
                 }
-                b"tbl" => table_depth = table_depth.saturating_sub(1),
+                b"tr" if table_depth == 1 => {
+                    if !row.cells.is_empty() {
+                        table.rows.push(std::mem::take(&mut row));
+                    }
+                }
+                b"tbl" => {
+                    if table_depth == 1 && !table.rows.is_empty() {
+                        blocks.push(FlowBlock::Table(std::mem::take(&mut table).finish()));
+                    }
+                    table_depth = table_depth.saturating_sub(1);
+                }
                 _ => {}
             },
             Ok(Event::Eof) => break,
@@ -684,59 +872,146 @@ fn parse_part(
     }
     // Re-scan the small XML part for section geometry without complicating the
     // paragraph state machine; both passes are linear and deterministic.
-    parse_geometry(bytes, &mut width, &mut height, &mut margins)?;
+    let mut header_offset = 48.0;
+    let mut footer_offset = 48.0;
+    parse_geometry(
+        bytes,
+        &mut width,
+        &mut height,
+        &mut margins,
+        &mut header_offset,
+        &mut footer_offset,
+    )?;
     Ok(ParsedDocument {
-        paragraphs,
+        blocks,
         size: Size { width, height },
         margins,
+        header_offset,
+        footer_offset,
         images,
-        tables: table_rows,
     })
 }
 
-fn paint_tables(rows: &[TableRow], margins: Margins, rendered: &mut crate::Rendered) {
-    for row in rows {
-        let mut target = None;
-        for (page_index, page) in rendered.pages.iter().enumerate() {
-            if let Some(baseline) = paragraph_baseline(&page.items, row.paragraph) {
-                target = Some((page_index, baseline));
-                break;
+/// Applies one table, row or cell property, returning whether it was consumed.
+///
+/// The scope matters as much as the name: `w:top` is a border inside
+/// `w:tblBorders` and a padding inside `w:tblCellMar`, and the two are not
+/// interchangeable.
+fn apply_table_property(
+    start: &BytesStart<'_>,
+    name: &[u8],
+    scope: TableScope,
+    table: &mut TableBuilder,
+    row: &mut PendingRow,
+    cell: Option<&mut PendingCell>,
+) -> bool {
+    match scope {
+        TableScope::TableBorders => {
+            let border = parse_border(start);
+            match name {
+                b"top" => table.borders.top = border,
+                b"left" | b"start" => table.borders.left = border,
+                b"bottom" => table.borders.bottom = border,
+                b"right" | b"end" => table.borders.right = border,
+                b"insideH" => table.borders.inside_horizontal = border,
+                b"insideV" => table.borders.inside_vertical = border,
+                _ => return false,
+            }
+            return true;
+        }
+        TableScope::CellMargins => {
+            let value = twip_num(start, b"w", 0);
+            match name {
+                b"top" => table.cell_margins.1 = value,
+                b"left" | b"start" => table.cell_margins.0 = value,
+                b"bottom" => table.cell_margins.3 = value,
+                b"right" | b"end" => table.cell_margins.2 = value,
+                _ => return false,
+            }
+            return true;
+        }
+        TableScope::CellBorders => {
+            let Some(cell) = cell else { return false };
+            let border = Some(parse_border(start));
+            match name {
+                b"top" => cell.overrides.top = border,
+                b"left" | b"start" => cell.overrides.left = border,
+                b"bottom" => cell.overrides.bottom = border,
+                b"right" | b"end" => cell.overrides.right = border,
+                _ => return false,
+            }
+            return true;
+        }
+        TableScope::Ignored => {
+            if matches!(
+                name,
+                b"top" | b"left" | b"start" | b"bottom" | b"right" | b"end"
+            ) {
+                return true;
             }
         }
-        let Some((page_index, baseline)) = target else {
-            continue;
-        };
-        let Some(page) = rendered.pages.get_mut(page_index) else {
-            continue;
-        };
-        let height = 22.0;
-        let mut x = margins.0;
-        for width in &row.widths {
-            let rect = Rect {
-                x,
-                y: (baseline - 16.0).max(0.0),
-                width: *width,
-                height,
-            };
-            page.items.push(Item::Path(crate::model::PathItem {
-                path: crate::model::rect_path(rect),
-                fill: None,
-                stroke: Some(crate::model::Stroke {
-                    paint: crate::model::Paint {
-                        colour: crate::model::Colour::BLACK,
-                    },
-                    width: 1.0,
-                    dash: Vec::new(),
-                }),
-                source: Some(SourceRef::Text {
-                    paragraph: row.paragraph,
-                    start: 0,
-                    end: 0,
-                }),
-            }));
-            x += *width;
-        }
+        TableScope::None => {}
     }
+    match name {
+        b"gridCol" => table.grid.push(twip_num(start, b"w", 1_440)),
+        b"tblInd" => table.indent = twip_num(start, b"w", 0),
+        b"trHeight" => {
+            row.minimum_height = attr(start, b"val")
+                .and_then(|value| value.parse::<u32>().ok())
+                .map(twip)
+                .unwrap_or(row.minimum_height)
+        }
+        b"gridSpan" => {
+            if let Some(cell) = cell {
+                cell.span = attr(start, b"val")
+                    .and_then(|value| value.parse::<usize>().ok())
+                    .unwrap_or(1)
+                    .max(1);
+            }
+        }
+        b"tcW" => {
+            if let Some(cell) = cell {
+                // `w:type="pct"` and `"auto"` are proportions rather than
+                // widths; only `dxa` is a measurement in twips.
+                cell.width = match attr(start, b"type").as_deref() {
+                    Some("dxa") | None => attr(start, b"w")
+                        .and_then(|value| value.parse::<u32>().ok())
+                        .map(twip)
+                        .filter(|width| *width > 0.0),
+                    Some(_) => None,
+                };
+            }
+        }
+        b"vMerge" => {
+            if let Some(cell) = cell {
+                cell.merge = match attr(start, b"val").as_deref() {
+                    Some("restart") => VerticalMerge::Start,
+                    Some("continue") | None => VerticalMerge::Continue,
+                    Some(_) => VerticalMerge::Continue,
+                };
+            }
+        }
+        b"vAlign" => {
+            if let Some(cell) = cell {
+                cell.vertical_alignment = match attr(start, b"val").as_deref() {
+                    Some("center") => VerticalAlignment::Centre,
+                    Some("bottom") => VerticalAlignment::Bottom,
+                    Some("top") | None => VerticalAlignment::Top,
+                    Some(_) => VerticalAlignment::Top,
+                };
+            }
+        }
+        b"shd" => {
+            if let Some(cell) = cell {
+                cell.shading = match attr(start, b"val").as_deref() {
+                    Some("nil") | Some("clear") | None => None,
+                    Some(_) => attr(start, b"fill").and_then(|value| border_colour(&value)),
+                };
+            }
+        }
+        _ => return false,
+    }
+    true
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -809,6 +1084,8 @@ fn parse_geometry(
     width: &mut f32,
     height: &mut f32,
     margins: &mut Margins,
+    header_offset: &mut f32,
+    footer_offset: &mut f32,
 ) -> Result<(), RenderError> {
     let mut reader = quick_xml::Reader::from_reader(bytes);
     loop {
@@ -836,6 +1113,13 @@ fn parse_geometry(
                     twip_num(&start, b"right", 1_440),
                     twip_num(&start, b"bottom", 1_440),
                 );
+                // `w:header` and `w:footer` are the distance from the page edge
+                // to the repeating part, and the section declares them. Fixing
+                // the header at 24 px put the NIST running head 24 px above
+                // LibreOffice's on all 34 pages, because that section asks for
+                // 720 twips.
+                *header_offset = twip_num(&start, b"header", 720);
+                *footer_offset = twip_num(&start, b"footer", 720);
             }
             Ok(Event::Eof) => break,
             Ok(_) => {}
@@ -887,12 +1171,19 @@ struct NumberLevel {
     start: u32,
     format: String,
     text: String,
+    /// `w:suff`: what separates the label from the paragraph. `tab` is the
+    /// default; the NIST chapter headings ask for `space`, and a tab there
+    /// pushed the heading to the next default stop.
+    suffix: &'static str,
 }
 
 #[derive(Default)]
 struct Numbering {
     nums: BTreeMap<u32, u32>,
     levels: BTreeMap<(u32, u32), NumberLevel>,
+    /// `w:startOverride` per numbering instance, which is how one abstract
+    /// definition is reused with a different first number.
+    starts: BTreeMap<(u32, u32), u32>,
 }
 
 impl Numbering {
@@ -905,11 +1196,8 @@ impl Numbering {
         let mut abstract_id = None;
         let mut num_id = None;
         let mut level_id = None;
-        let mut level = NumberLevel {
-            start: 1,
-            format: "decimal".into(),
-            text: "%1.".into(),
-        };
+        let mut level = NumberLevel::default();
+        let mut override_level = None::<u32>;
         loop {
             match reader.read_event() {
                 Ok(Event::Start(start)) => match xml::local_name(start.name().as_ref()) {
@@ -920,16 +1208,21 @@ impl Numbering {
                     b"num" => num_id = attr(&start, b"numId").and_then(|value| value.parse().ok()),
                     b"lvl" => {
                         level_id = attr(&start, b"ilvl").and_then(|value| value.parse().ok());
-                        level = NumberLevel {
-                            start: 1,
-                            format: "decimal".into(),
-                            text: "%1.".into(),
-                        };
+                        level = NumberLevel::default();
                     }
-                    _ => apply_numbering_value(&start, num_id, &mut output, &mut level),
+                    b"lvlOverride" => {
+                        override_level = attr(&start, b"ilvl").and_then(|value| value.parse().ok())
+                    }
+                    _ => apply_numbering_value(
+                        &start,
+                        num_id,
+                        override_level,
+                        &mut output,
+                        &mut level,
+                    ),
                 },
                 Ok(Event::Empty(start)) => {
-                    apply_numbering_value(&start, num_id, &mut output, &mut level)
+                    apply_numbering_value(&start, num_id, override_level, &mut output, &mut level)
                 }
                 Ok(Event::End(end)) => match xml::local_name(end.name().as_ref()) {
                     b"lvl" => {
@@ -940,6 +1233,7 @@ impl Numbering {
                     }
                     b"abstractNum" => abstract_id = None,
                     b"num" => num_id = None,
+                    b"lvlOverride" => override_level = None,
                     _ => {}
                 },
                 Ok(Event::Eof) => break,
@@ -950,32 +1244,90 @@ impl Numbering {
         Ok(output)
     }
 
+    /// The first number this instance uses at `level_id`, honouring
+    /// `w:startOverride`.
+    fn start(&self, num_id: u32, abstract_id: u32, level_id: u32) -> u32 {
+        self.starts
+            .get(&(num_id, level_id))
+            .copied()
+            .or_else(|| {
+                self.levels
+                    .get(&(abstract_id, level_id))
+                    .map(|level| level.start)
+            })
+            .unwrap_or(1)
+    }
+
+    /// The label for one numbered paragraph, and what separates it from the
+    /// text.
+    ///
+    /// `w:lvlText` is a template over *every* level, not just this one:
+    /// `%1.%2.` at level 1 is "chapter dot section dot", and substituting only
+    /// `%2` left the chapter number as a literal `%1`. Advancing a level also
+    /// restarts the ones below it, which is what makes 2.2.1 follow 2.2 rather
+    /// than continuing from wherever the previous section left off.
     fn label(
         &self,
         num_id: u32,
         level_id: u32,
         counters: &mut BTreeMap<(u32, u32), u32>,
-    ) -> Option<String> {
+    ) -> Option<(String, &'static str)> {
         let abstract_id = *self.nums.get(&num_id)?;
         let level = self.levels.get(&(abstract_id, level_id))?;
-        let counter = counters.entry((num_id, level_id)).or_insert(level.start);
+        if level.format == "none" {
+            return None;
+        }
+        let counter = counters
+            .entry((num_id, level_id))
+            .or_insert_with(|| self.start(num_id, abstract_id, level_id));
         let value = *counter;
         *counter = counter.saturating_add(1);
-        if level.format == "bullet" {
-            return Some(level.text.clone());
+        for deeper in level_id.saturating_add(1)..=MAX_LIST_LEVEL {
+            counters.remove(&(num_id, deeper));
         }
-        let formatted = format_number(value, &level.format);
-        Some(
-            level
-                .text
-                .replace(&format!("%{}", level_id + 1), &formatted),
-        )
+        if level.format == "bullet" {
+            return Some((level.text.clone(), level.suffix));
+        }
+        let mut text = level.text.clone();
+        for ancestor in 0..=level_id {
+            let Some(ancestor_level) = self.levels.get(&(abstract_id, ancestor)) else {
+                continue;
+            };
+            let ancestor_value = if ancestor == level_id {
+                value
+            } else {
+                counters
+                    .get(&(num_id, ancestor))
+                    .map(|next| next.saturating_sub(1))
+                    .unwrap_or_else(|| self.start(num_id, abstract_id, ancestor))
+            };
+            text = text.replace(
+                &format!("%{}", ancestor + 1),
+                &format_number(ancestor_value, &ancestor_level.format),
+            );
+        }
+        Some((text, level.suffix))
+    }
+}
+
+/// `w:ilvl` is 0 to 8 in ECMA-376.
+const MAX_LIST_LEVEL: u32 = 8;
+
+impl Default for NumberLevel {
+    fn default() -> Self {
+        Self {
+            start: 1,
+            format: "decimal".into(),
+            text: "%1.".into(),
+            suffix: "\t",
+        }
     }
 }
 
 fn apply_numbering_value(
     start: &BytesStart<'_>,
     num_id: Option<u32>,
+    override_level: Option<u32>,
     output: &mut Numbering,
     level: &mut NumberLevel,
 ) {
@@ -988,6 +1340,15 @@ fn apply_numbering_value(
                 output.nums.insert(num_id, abstract_id);
             }
         }
+        b"startOverride" => {
+            if let (Some(num_id), Some(level_id), Some(value)) = (
+                num_id,
+                override_level,
+                attr(start, b"val").and_then(|value| value.parse().ok()),
+            ) {
+                output.starts.insert((num_id, level_id), value);
+            }
+        }
         b"start" => {
             level.start = attr(start, b"val")
                 .and_then(|value| value.parse().ok())
@@ -995,6 +1356,14 @@ fn apply_numbering_value(
         }
         b"numFmt" => level.format = attr(start, b"val").unwrap_or_else(|| "decimal".into()),
         b"lvlText" => level.text = attr(start, b"val").unwrap_or_else(|| "%1.".into()),
+        b"suff" => {
+            level.suffix = match attr(start, b"val").as_deref() {
+                Some("space") => " ",
+                Some("nothing") => "",
+                Some("tab") | None => "\t",
+                Some(_) => "\t",
+            }
+        }
         _ => {}
     }
 }
