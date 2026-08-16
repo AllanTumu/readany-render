@@ -628,6 +628,83 @@ fn pptx_inherits_placeholder_geometry_and_embeds_relationship_images() {
     assert_eq!(error.code, RenderErrorCode::LimitExceeded);
 }
 
+fn slide_run(text: &str) -> readany_render::GlyphRun {
+    let rendered = render(
+        &fixture("slide-features.pptx"),
+        &Options {
+            filename: Some("slide-features.pptx"),
+            ..Options::default()
+        },
+    )
+    .expect("the generated slide feature deck is valid");
+    fn find(items: &[Item], text: &str) -> Option<readany_render::GlyphRun> {
+        for item in items {
+            match item {
+                Item::Glyphs(run) if run.text.starts_with(text) => return Some(run.clone()),
+                Item::Group(group) => {
+                    if let Some(run) = find(&group.items, text) {
+                        return Some(run);
+                    }
+                }
+                Item::Glyphs(_) | Item::Path(_) | Item::Image(_) => {}
+                // `Item` is `#[non_exhaustive]` outside the crate.
+                _ => {}
+            }
+        }
+        None
+    }
+    find(&rendered.pages[0].items, text).unwrap_or_else(|| panic!("no run beginning {text:?}"))
+}
+
+/// A shape inside a `p:grpSp` is placed through its group's transform, not at
+/// the raw offset it declares.
+///
+/// The fixture's group sits at 192 px and writes its children in a space twice
+/// its own size, so a child at 192 px lands at 192 + 192 / 2 = 288 px, plus the
+/// 9.6 px default text inset.
+///
+/// **Falsified** by returning `rect` unchanged from `GroupTransform::map`: the
+/// label stays at its raw 201.6 px and the assertion below fails.
+#[test]
+fn a_grouped_shape_is_placed_through_the_transform_its_group_declares() {
+    let run = slide_run("Grouped");
+    assert!(
+        (run.origin.x - 297.6).abs() < 0.5,
+        "the grouped label is mapped out of its group's child space: {}",
+        run.origin.x
+    );
+    // 144 px mapped top, plus the 4.8 px inset, plus the 16 px baseline drop.
+    assert!(
+        (run.origin.y - 164.8).abs() < 0.5,
+        "and mapped on both axes: {}",
+        run.origin.y
+    );
+}
+
+/// `a:xfrm rot` is carried into the display list so a turned text box is not
+/// drawn flat.
+///
+/// **Falsified** by dropping the `rot` attribute read: `rotation_deg` is 0 and
+/// the origin sits at the unturned position.
+#[test]
+fn a_turned_shape_carries_its_quarter_turn_into_the_display_list() {
+    let run = slide_run("Turned label");
+    assert!(
+        (run.rotation_deg - 90.0).abs() < 0.01,
+        "5,400,000 sixty-thousandths of a degree is a quarter turn: {}",
+        run.rotation_deg
+    );
+    // The box spans 576..768 px across and 96..144 px down, so its centre is
+    // (672, 120); turning the top-left text origin a quarter turn about that
+    // centre puts it right of centre and above it.
+    assert!(
+        run.origin.x > 672.0 && run.origin.y < 120.0,
+        "the origin turns about the shape's centre: ({}, {})",
+        run.origin.x,
+        run.origin.y
+    );
+}
+
 #[test]
 fn every_text_item_carries_provenance() {
     for name in [

@@ -20,6 +20,53 @@ impl Placeholder {
     }
 }
 
+/// A `p:grpSp`'s coordinate mapping.
+///
+/// A group declares where it sits on the slide (`a:off`/`a:ext`) *and* the
+/// coordinate space its children are written in (`a:chOff`/`a:chExt`). The two
+/// are unrelated numbers, so a child's `a:off` is meaningless until it is mapped
+/// through its group — the NASA deck's second slide holds 44 groups, and reading
+/// their children's raw offsets scattered every one of them.
+#[derive(Clone, Copy, Default)]
+struct GroupTransform {
+    offset: (f32, f32),
+    extent: (f32, f32),
+    child_offset: (f32, f32),
+    child_extent: (f32, f32),
+}
+
+impl GroupTransform {
+    fn map(&self, rect: Rect) -> Rect {
+        // `p:spTree`'s own `p:grpSpPr` is all zeroes, and so is any group that
+        // has never been sized; both mean "no mapping", not "collapse to a
+        // point".
+        if self.child_extent.0 <= 0.0
+            || self.child_extent.1 <= 0.0
+            || self.extent.0 <= 0.0
+            || self.extent.1 <= 0.0
+        {
+            return rect;
+        }
+        let scale_x = self.extent.0 / self.child_extent.0;
+        let scale_y = self.extent.1 / self.child_extent.1;
+        Rect {
+            x: self.offset.0 + (rect.x - self.child_offset.0) * scale_x,
+            y: self.offset.1 + (rect.y - self.child_offset.1) * scale_y,
+            width: rect.width * scale_x,
+            height: rect.height * scale_y,
+        }
+    }
+}
+
+/// Maps a child rectangle out through every group that encloses it, innermost
+/// first.
+fn apply_groups(rect: Rect, groups: &[GroupTransform]) -> Rect {
+    groups
+        .iter()
+        .rev()
+        .fold(rect, |rect, group| group.map(rect))
+}
+
 #[derive(Clone, Copy, Default)]
 enum TextAlignment {
     #[default]
@@ -294,6 +341,9 @@ fn parse_slide(
     let mut geometry = String::new();
     let mut shape_kind = Vec::<u8>::new();
     let mut image_relationship = None::<String>;
+    let mut groups = Vec::<GroupTransform>::new();
+    let mut in_group_properties = false;
+    let mut rotation_deg = 0.0_f32;
     let (mut x, mut y, mut width, mut height) = (48.0, 48.0, size.width - 96.0, 80.0);
     loop {
         match reader.read_event() {
@@ -313,7 +363,50 @@ fn parse_slide(
                 geometry.clear();
                 image_relationship = None;
                 shape_kind = xml::local_name(s.name().as_ref()).to_vec();
+                rotation_deg = 0.0;
                 (x, y, width, height) = (48.0, 48.0, size.width - 96.0, 80.0);
+            }
+            Ok(Event::Start(s)) if xml::local_name(s.name().as_ref()) == b"grpSp" => {
+                groups.push(GroupTransform::default());
+            }
+            Ok(Event::End(s)) if xml::local_name(s.name().as_ref()) == b"grpSp" => {
+                groups.pop();
+            }
+            Ok(Event::Start(s)) if xml::local_name(s.name().as_ref()) == b"grpSpPr" => {
+                in_group_properties = true
+            }
+            Ok(Event::End(s)) if xml::local_name(s.name().as_ref()) == b"grpSpPr" => {
+                in_group_properties = false
+            }
+            Ok(Event::Empty(s)) | Ok(Event::Start(s))
+                if xml::local_name(s.name().as_ref()) == b"xfrm" =>
+            {
+                // 60,000ths of a degree, clockwise.
+                if !in_group_properties {
+                    rotation_deg = attr(&s, b"rot")
+                        .and_then(|value| value.parse::<f32>().ok())
+                        .map(|value| value / 60_000.0)
+                        .unwrap_or(0.0);
+                }
+            }
+            Ok(Event::Empty(s))
+                if in_group_properties
+                    && matches!(
+                        xml::local_name(s.name().as_ref()),
+                        b"off" | b"ext" | b"chOff" | b"chExt"
+                    ) =>
+            {
+                // The slide's root `p:grpSpPr` has no group to fill, and must
+                // not be mistaken for the geometry of the shape that follows.
+                if let Some(group) = groups.last_mut() {
+                    match xml::local_name(s.name().as_ref()) {
+                        b"off" => group.offset = (emu(&s, b"x", 0.0), emu(&s, b"y", 0.0)),
+                        b"ext" => group.extent = (emu(&s, b"cx", 0.0), emu(&s, b"cy", 0.0)),
+                        b"chOff" => group.child_offset = (emu(&s, b"x", 0.0), emu(&s, b"y", 0.0)),
+                        b"chExt" => group.child_extent = (emu(&s, b"cx", 0.0), emu(&s, b"cy", 0.0)),
+                        _ => {}
+                    }
+                }
             }
             Ok(Event::Start(s)) if xml::local_name(s.name().as_ref()) == b"spPr" => {
                 in_shape_properties = true
@@ -467,12 +560,16 @@ fn parse_slide(
                     slide,
                     shape: shape_index - 1,
                 };
-                let rect = Rect {
-                    x,
-                    y,
-                    width,
-                    height,
-                };
+                let rect = apply_groups(
+                    Rect {
+                        x,
+                        y,
+                        width,
+                        height,
+                    },
+                    &groups,
+                );
+                let (x, y, width, height) = (rect.x, rect.y, rect.width, rect.height);
                 let mut shape_items = Vec::new();
                 if let Some(target) = image_relationship
                     .as_ref()
@@ -552,6 +649,7 @@ fn parse_slide(
                     rect,
                     placeholder.as_ref(),
                     &source,
+                    rotation_deg,
                 ));
                 items.push(Item::Group(Group {
                     clip: Some(Rect {
@@ -715,6 +813,7 @@ fn layout_slide_text(
     rect: Rect,
     placeholder: Option<&Placeholder>,
     source: &SourceRef,
+    rotation_deg: f32,
 ) -> Vec<Item> {
     // Leave one device pixel for the EMU-to-pixel rounding at the far edge.
     // Without it the 585.6 px NASA image-credit line narrowly fit a 586.4 px
@@ -795,20 +894,41 @@ fn layout_slide_text(
         };
         for run in line.runs {
             let width = measure_text(&run.text, &run.style);
-            output.push(Item::Glyphs(shape(
-                &run.text,
-                &run.style,
+            // `a:xfrm rot` turns the shape about its own centre, so the text
+            // inside it turns with the box rather than about its own origin.
+            let origin = rotate_about(
                 Point {
                     x,
                     y: y + run.style.size_px,
                 },
-                Some(source.clone()),
-            )));
+                Point {
+                    x: rect.x + rect.width / 2.0,
+                    y: rect.y + rect.height / 2.0,
+                },
+                rotation_deg,
+            );
+            let mut glyphs = shape(&run.text, &run.style, origin, Some(source.clone()));
+            glyphs.rotation_deg = rotation_deg;
+            output.push(Item::Glyphs(glyphs));
             x += width;
         }
         y += line_height * line_spacing;
     }
     output
+}
+
+/// Turns `point` about `centre` by `degrees` clockwise in display-list space.
+fn rotate_about(point: Point, centre: Point, degrees: f32) -> Point {
+    if degrees == 0.0 {
+        return point;
+    }
+    let (sin, cos) = degrees.to_radians().sin_cos();
+    let dx = point.x - centre.x;
+    let dy = point.y - centre.y;
+    Point {
+        x: centre.x + dx * cos - dy * sin,
+        y: centre.y + dx * sin + dy * cos,
+    }
 }
 
 fn wrap_slide_paragraph(paragraph: &SlideParagraph, width: f32, kind: &str) -> Vec<SlideLine> {
@@ -826,7 +946,11 @@ fn wrap_slide_paragraph(paragraph: &SlideParagraph, width: f32, kind: &str) -> V
             style.size_px = 16.0;
         }
         for token in run.text.split_inclusive(char::is_whitespace) {
-            let token_width = measure_text(token, &style);
+            // A word is measured without the space that follows it. Counting
+            // that space made a line that ends exactly at the box edge look
+            // like an overflow, and every such line in the NASA deck lost its
+            // last word to the line below.
+            let token_width = measure_text(token.trim_end(), &style);
             if line.width + token_width > width && !line.runs.is_empty() {
                 lines.push(std::mem::replace(
                     &mut line,
